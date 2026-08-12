@@ -1,180 +1,381 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ExternalLink } from '@/components/external-link';
+import { ExploreListingCard } from '@/components/explore-listing-card';
+import { ExploreVendorCard } from '@/components/explore-vendor-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Collapsible } from '@/components/ui/collapsible';
-import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import {
+  fetchExploreHubCarousels,
+  fetchExploreProducts,
+  fetchExploreVendors,
+  filterListingsBySearch,
+  filterVendorsBySearch,
+  type ExploreCarouselSection,
+  type ExploreListing,
+  type ExploreVendor,
+} from '@/lib/listings';
 
-export default function TabTwoScreen() {
-  const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
-  };
+type HubView = 'all' | 'products' | 'vendors';
+
+const VIEW_PILLS: { id: HubView; label: string; tint: string }[] = [
+  { id: 'all', label: 'All', tint: '#F43F5E' },
+  { id: 'products', label: 'Products', tint: '#F59E0B' },
+  { id: 'vendors', label: 'Vendors', tint: '#059669' },
+];
+
+/**
+ * Phase 4b: Explore hub shaped like the website —
+ * search + All/Products/Vendors + horizontal “Popular in…” carousels.
+ */
+export default function ExploreScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
-    },
-    web: {
-      paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
-    },
-  });
+  const [view, setView] = useState<HubView>('all');
+  const [search, setSearch] = useState('');
+  const [carousels, setCarousels] = useState<ExploreCarouselSection[]>([]);
+  const [products, setProducts] = useState<ExploreListing[]>([]);
+  const [vendors, setVendors] = useState<ExploreVendor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+
+    try {
+      const [hub, productRows, vendorRows] = await Promise.all([
+        fetchExploreHubCarousels(),
+        fetchExploreProducts(),
+        fetchExploreVendors(),
+      ]);
+      setCarousels(hub);
+      setProducts(productRows);
+      setVendors(vendorRows);
+    } catch (err) {
+      console.error('Explore hub fetch failed', err);
+      setError('Could not load Explore. Pull to refresh or try again.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const filteredProducts = useMemo(
+    () => filterListingsBySearch(products, search),
+    [products, search],
+  );
+  const filteredVendors = useMemo(
+    () => filterVendorsBySearch(vendors, search),
+    [vendors, search],
+  );
+  const filteredCarousels = useMemo(() => {
+    if (search.trim().length < 2) return carousels;
+    return carousels
+      .map((section) => ({
+        ...section,
+        listings: filterListingsBySearch(section.listings, search),
+      }))
+      .filter((section) => section.listings.length > 0);
+  }, [carousels, search]);
+
+  const bottomPad = insets.bottom + BottomTabInset + Spacing.three;
+
+  const header = (
+    <View style={styles.header}>
+      <ThemedText type="title" style={styles.brand}>
+        WellnessXplora
+      </ThemedText>
+
+      <View
+        style={[
+          styles.searchBox,
+          {
+            backgroundColor: theme.backgroundElement,
+            borderColor: theme.backgroundSelected,
+          },
+        ]}>
+        <ThemedText type="small" themeColor="textSecondary">
+          ⌕
+        </ThemedText>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search wellness products, vendors etc..."
+          placeholderTextColor={theme.textSecondary}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+          style={[styles.searchInput, { color: theme.text }]}
+        />
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.pillsRow}>
+        {VIEW_PILLS.map((pill) => {
+          const active = view === pill.id;
+          return (
+            <Pressable
+              key={pill.id}
+              onPress={() => setView(pill.id)}
+              style={[
+                styles.pill,
+                {
+                  backgroundColor: active ? theme.backgroundSelected : theme.backgroundElement,
+                  borderColor: active ? theme.textSecondary : 'transparent',
+                },
+              ]}>
+              <View style={[styles.pillDot, { backgroundColor: pill.tint }]} />
+              <ThemedText type="smallBold">{pill.label}</ThemedText>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <ThemedView style={styles.centered}>
+        <ActivityIndicator />
+        <ThemedText type="small" themeColor="textSecondary">
+          Loading Explore…
+        </ThemedText>
+      </ThemedView>
+    );
+  }
+
+  if (error) {
+    return (
+      <ThemedView style={styles.centered}>
+        <ThemedText type="smallBold" style={styles.errorText}>
+          {error}
+        </ThemedText>
+        <Pressable
+          onPress={() => void load()}
+          style={({ pressed }) => [
+            styles.retry,
+            { borderColor: theme.text, opacity: pressed ? 0.7 : 1 },
+          ]}>
+          <ThemedText type="smallBold">Try again</ThemedText>
+        </Pressable>
+      </ThemedView>
+    );
+  }
+
+  if (view === 'all') {
+    return (
+      <ThemedView style={styles.screen}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: insets.top + Spacing.three,
+              paddingBottom: bottomPad,
+            },
+          ]}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />
+          }>
+          {header}
+
+          {filteredCarousels.length === 0 ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
+              No listings match your search.
+            </ThemedText>
+          ) : (
+            filteredCarousels.map((section) => (
+              <View key={section.slug} style={styles.section}>
+                <ThemedText type="subtitle">{section.title}</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {section.subtitle}
+                </ThemedText>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.carouselContent}>
+                  {section.listings.map((item, index) => (
+                    <View
+                      key={item.id}
+                      style={index < section.listings.length - 1 ? styles.carouselItem : undefined}>
+                      <ExploreListingCard listing={item} compact />
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </ThemedView>
+    );
+  }
+
+  if (view === 'products') {
+    return (
+      <ThemedView style={styles.screen}>
+        <FlatList
+          data={filteredProducts}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[
+            styles.listContent,
+            {
+              paddingTop: insets.top + Spacing.three,
+              paddingBottom: bottomPad,
+            },
+          ]}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />
+          }
+          ListHeaderComponent={header}
+          ListEmptyComponent={
+            <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
+              No products found.
+            </ThemedText>
+          }
+          ItemSeparatorComponent={() => <View style={styles.listGap} />}
+          renderItem={({ item }) => <ExploreListingCard listing={item} />}
+        />
+      </ThemedView>
+    );
+  }
 
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{'\n'}code to help you get started.
+    <ThemedView style={styles.screen}>
+      <FlatList
+        data={filteredVendors}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={[
+          styles.listContent,
+          {
+            paddingTop: insets.top + Spacing.three,
+            paddingBottom: bottomPad,
+          },
+        ]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />
+        }
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
+            No vendors found.
           </ThemedText>
-
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
-        </ThemedView>
-
-        <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
-            </ThemedText>
-            <ThemedText type="small">
-              The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open the web version,
-                press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-                project.
-              </ThemedText>
-              <Image
-                source={require('@/assets/images/tutorial-web.png')}
-                style={styles.imageTutorial}
-              />
-            </ThemedView>
-          </Collapsible>
-
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-              screen densities.
-            </ThemedText>
-            <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{' '}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-              user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{' '}
-              <ThemedText type="code">src/components/ui/collapsible.tsx</ThemedText> component uses
-              the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-              animate opening this hint.
-            </ThemedText>
-          </Collapsible>
-        </ThemedView>
-        {Platform.OS === 'web' && <WebBadge />}
-      </ThemedView>
-    </ScrollView>
+        }
+        ItemSeparatorComponent={() => <View style={styles.listGap} />}
+        renderItem={({ item }) => <ExploreVendorCard vendor={item} />}
+      />
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
+  screen: {
     flex: 1,
   },
-  contentContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
-  },
-  titleContainer: {
-    gap: Spacing.three,
+  centered: {
+    flex: 1,
     alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
+    justifyContent: 'center',
+    padding: Spacing.four,
+    gap: Spacing.three,
   },
-  centerText: {
+  scrollContent: {
+    paddingHorizontal: Spacing.four,
+    maxWidth: MaxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+    gap: Spacing.four,
+  },
+  listContent: {
+    paddingHorizontal: Spacing.four,
+    maxWidth: MaxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  header: {
+    gap: Spacing.three,
+    marginBottom: Spacing.two,
+  },
+  brand: {
+    textAlign: 'left',
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: Spacing.two,
+  },
+  pillsRow: {
+    gap: Spacing.two,
+    paddingVertical: Spacing.one,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  pillDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  section: {
+    gap: Spacing.two,
+  },
+  carouselContent: {
+    paddingTop: Spacing.two,
+    paddingRight: Spacing.four,
+  },
+  carouselItem: {
+    marginRight: Spacing.three,
+  },
+  listGap: {
+    height: Spacing.three,
+  },
+  empty: {
+    marginTop: Spacing.four,
     textAlign: 'center',
   },
-  pressed: {
-    opacity: 0.7,
+  errorText: {
+    color: '#B42318',
+    textAlign: 'center',
   },
-  linkButton: {
-    flexDirection: 'row',
+  retry: {
+    borderWidth: 1,
+    borderRadius: Spacing.two,
     paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-    justifyContent: 'center',
-    gap: Spacing.one,
-    alignItems: 'center',
-  },
-  sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-  },
-  collapsibleContent: {
-    alignItems: 'center',
-  },
-  imageTutorial: {
-    width: '100%',
-    aspectRatio: 296 / 171,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.two,
-  },
-  imageReact: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
+    paddingVertical: Spacing.three,
   },
 });
