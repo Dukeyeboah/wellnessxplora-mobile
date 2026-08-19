@@ -1,12 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
+  createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
   type ConfirmationResult,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { Platform } from 'react-native';
 
 import { auth, db } from '@/lib/firebase';
@@ -20,7 +21,9 @@ type AuthContextValue = {
   userRole: UserRole | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string, role: UserRole) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  signupWithGoogle: (role: UserRole) => Promise<void>;
   loginWithGoogleIdToken: (idToken: string) => Promise<void>;
   startPhoneLogin: (phone: string, recaptchaContainerId: string) => Promise<ConfirmationResult>;
   confirmPhoneLogin: (confirmation: ConfirmationResult, code: string) => Promise<void>;
@@ -28,6 +31,12 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+let pendingSignupRole: UserRole | null = null;
+
+export function setPendingSignupRole(role: UserRole | null) {
+  pendingSignupRole = role;
+}
 
 function mapAuthError(error: unknown): string {
   const code =
@@ -42,6 +51,10 @@ function mapAuthError(error: unknown): string {
     case 'auth/wrong-password':
     case 'auth/invalid-credential':
       return 'Incorrect email or password.';
+    case 'auth/email-already-in-use':
+      return 'That email already has an account. Log in instead.';
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters.';
     case 'auth/too-many-requests':
       return 'Too many attempts. Try again in a few minutes.';
     case 'auth/network-request-failed':
@@ -57,25 +70,69 @@ function mapAuthError(error: unknown): string {
     case 'auth/phone-native-unavailable':
       return 'Phone sign-in on device needs a development build. Test it in the browser for now.';
     case 'auth/no-app-profile':
-      return 'No WellnessXplora account found for this login. Sign up on the website first.';
+      return 'No WellnessXplora account found for this login. Create an account first.';
+    case 'auth/profile-exists':
+      return 'That account already exists. Log in instead.';
+    case 'auth/role-required':
+      return 'Select Vendor or Explorer before continuing.';
     default:
       return 'Could not sign in. Please try again.';
   }
 }
 
-async function requireExistingProfile(user: User): Promise<UserRole | null> {
-  const snap = await getDoc(doc(db, 'users', user.uid));
-  if (!snap.exists()) {
-    await signOut(auth);
-    const err = new Error('No app profile') as Error & { code: string };
-    err.code = 'auth/no-app-profile';
-    throw err;
-  }
-
-  const role = snap.data()?.role;
+function roleFromDoc(data: Record<string, unknown> | undefined): UserRole | null {
+  const role = data?.role;
   if (role === 'vendor' || role === 'explorer') return role;
   if (role === 'user') return 'explorer';
   return null;
+}
+
+async function createUserProfile(user: User, role: UserRole): Promise<void> {
+  const email = user.email ?? '';
+  const displayName =
+    user.displayName || user.phoneNumber || (email ? email.split('@')[0] : '') || 'Member';
+
+  await setDoc(doc(db, 'users', user.uid), {
+    name: displayName,
+    email,
+    role,
+    photoURL: user.photoURL ?? '',
+    bannerURL: '',
+    profileComplete: false,
+    createdAt: serverTimestamp(),
+    location: { country: '', city: '', area: '' },
+  });
+}
+
+async function ensureProfile(user: User): Promise<UserRole | null> {
+  const snap = await getDoc(doc(db, 'users', user.uid));
+  if (snap.exists()) {
+    pendingSignupRole = null;
+    return roleFromDoc(snap.data() as Record<string, unknown>);
+  }
+
+  if (pendingSignupRole) {
+    const role = pendingSignupRole;
+    await createUserProfile(user, role);
+    pendingSignupRole = null;
+    return role;
+  }
+
+  await signOut(auth);
+  const err = new Error('No app profile') as Error & { code: string };
+  err.code = 'auth/no-app-profile';
+  throw err;
+}
+
+async function googlePopup() {
+  if (Platform.OS !== 'web') {
+    const err = new Error('Use the Google button native flow on device.') as Error & {
+      code: string;
+    };
+    err.code = 'auth/operation-not-supported-in-this-environment';
+    throw err;
+  }
+  return signInWithGooglePopup();
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -93,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const role = await requireExistingProfile(currentUser);
+        const role = await ensureProfile(currentUser);
         setUser(currentUser);
         setUserRole(role);
       } catch (err) {
@@ -101,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           typeof err === 'object' && err !== null && 'code' in err
             ? String((err as { code: string }).code)
             : '';
-        if (code === 'auth/no-app-profile') {
+        if (code === 'auth/no-app-profile' || code === 'auth/profile-exists') {
           setUser(null);
           setUserRole(null);
         }
@@ -113,16 +170,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsubscribe;
   }, []);
 
-  const finishLogin = useCallback(async (currentUser: User) => {
-    await requireExistingProfile(currentUser);
+  const finishAuth = useCallback(async (currentUser: User) => {
+    await ensureProfile(currentUser);
   }, []);
 
   const loginWithGoogleIdTokenCb = useCallback(
     async (idToken: string) => {
       const cred = await signInWithGoogleIdToken(idToken);
-      await finishLogin(cred.user);
+      await finishAuth(cred.user);
     },
-    [finishLogin],
+    [finishAuth],
   );
 
   const value = useMemo<AuthContextValue>(
@@ -131,24 +188,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userRole,
       loading,
       login: async (email, password) => {
+        pendingSignupRole = null;
         const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-        await finishLogin(cred.user);
+        await finishAuth(cred.user);
       },
-      loginWithGoogle: async () => {
-        if (Platform.OS !== 'web') {
-          const err = new Error(
-            'Use the Google button native flow on device.',
-          ) as Error & { code: string };
-          err.code = 'auth/operation-not-supported-in-this-environment';
+      signup: async (email, password, role) => {
+        pendingSignupRole = role;
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+          await finishAuth(cred.user);
+        } catch (err) {
+          pendingSignupRole = null;
           throw err;
         }
-        const cred = await signInWithGooglePopup();
-        await finishLogin(cred.user);
+      },
+      loginWithGoogle: async () => {
+        pendingSignupRole = null;
+        const cred = await googlePopup();
+        await finishAuth(cred.user);
+      },
+      signupWithGoogle: async (role) => {
+        pendingSignupRole = role;
+        try {
+          const cred = await googlePopup();
+          await finishAuth(cred.user);
+        } catch (err) {
+          pendingSignupRole = null;
+          throw err;
+        }
       },
       loginWithGoogleIdToken: loginWithGoogleIdTokenCb,
       startPhoneLogin: async (phone, recaptchaContainerId) => {
         const normalized = normalizePhoneForAuth(phone);
-        if (!normalized.startsWith('+') || normalized.length < 11) {
+        if (!/^\+\d{10,15}$/.test(normalized)) {
           const err = new Error('Invalid phone') as Error & { code: string };
           err.code = 'auth/invalid-phone-number';
           throw err;
@@ -158,17 +230,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       confirmPhoneLogin: async (confirmation, code) => {
         try {
           const cred = await confirmation.confirm(code.trim());
-          await finishLogin(cred.user);
+          await finishAuth(cred.user);
         } finally {
           clearPhoneRecaptcha();
         }
       },
       logout: async () => {
+        pendingSignupRole = null;
         clearPhoneRecaptcha();
         await signOut(auth);
       },
     }),
-    [user, userRole, loading, finishLogin, loginWithGoogleIdTokenCb],
+    [user, userRole, loading, finishAuth, loginWithGoogleIdTokenCb],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

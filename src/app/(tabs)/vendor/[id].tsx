@@ -1,0 +1,672 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image } from 'expo-image';
+import * as Linking from 'expo-linking';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { ExploreListingCard } from '@/components/explore-listing-card';
+import { ListingRatingSummary } from '@/components/listing-rating-summary';
+import { StarRating } from '@/components/star-rating';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { VendorTrustBadges } from '@/components/vendor-trust-badges';
+import { BottomTabInset, Fonts, Shadows, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/lib/auth-context';
+import { useChrome, useScrollChrome } from '@/lib/chrome';
+import {
+  categorySlugFromLabel,
+  getCategoryBySlug,
+} from '@/lib/explore-categories';
+import {
+  fetchListingsByVendorId,
+  fetchVendorById,
+  type ExploreListing,
+  type ExploreVendorDetail,
+} from '@/lib/listings';
+import { buildVendorWhatsAppUrl } from '@/lib/vendor-contact';
+import { requireAuth } from '@/lib/require-auth';
+import {
+  fetchVendorReviews,
+  getMyVendorReview,
+  setMyVendorReview,
+  type PublicVendorReview,
+} from '@/lib/vendor-reviews';
+
+type VendorPanel = 'bio' | 'share' | 'review';
+
+const BIO = '#0284C7';
+const SHARE = '#7C3AED';
+const REVIEW = '#D97706';
+const WHATSAPP = '#25D366';
+const HEART_BG = '#FDECEC';
+
+export default function VendorDetailScreen() {
+  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
+  const theme = useTheme();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const { user } = useAuth();
+  const { resetChrome } = useChrome();
+  const scrollChrome = useScrollChrome();
+
+  const [vendor, setVendor] = useState<ExploreVendorDetail | null>(null);
+  const [listings, setListings] = useState<ExploreListing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [panel, setPanel] = useState<VendorPanel | null>(null);
+  const [bioExpanded, setBioExpanded] = useState(false);
+  const [bioTruncated, setBioTruncated] = useState(false);
+  const [reviews, setReviews] = useState<PublicVendorReview[]>([]);
+  const [myRating, setMyRating] = useState(0);
+  const [commentText, setCommentText] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      resetChrome();
+      return () => resetChrome();
+    }, [resetChrome]),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!id) {
+        setError('Missing vendor id.');
+        setLoading(false);
+        return;
+      }
+      try {
+        const [vendorRow, vendorListings] = await Promise.all([
+          fetchVendorById(id),
+          fetchListingsByVendorId(id),
+        ]);
+        if (!cancelled) {
+          if (!vendorRow) setError('Vendor not found.');
+          else {
+            setVendor(vendorRow);
+            setListings(vendorListings);
+            const [rows, mine] = await Promise.all([
+              fetchVendorReviews(id).catch(() => [] as PublicVendorReview[]),
+              user ? getMyVendorReview(id, user.uid).catch(() => null) : Promise.resolve(null),
+            ]);
+            if (cancelled) return;
+            setReviews(rows);
+            if (mine?.rating) {
+              setMyRating(mine.rating);
+              setCommentText(mine.comment);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) setError('Could not load this vendor.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, user]);
+
+  const backCategory = useMemo(() => {
+    const fromSlug = typeof from === 'string' ? from : '';
+    if (fromSlug) return getCategoryBySlug(fromSlug);
+    const first = vendor?.categories[0];
+    return first ? getCategoryBySlug(categorySlugFromLabel(first)) : undefined;
+  }, [from, vendor]);
+
+  const primaryCategory = useMemo(() => {
+    const first = vendor?.categories[0];
+    return first ? getCategoryBySlug(categorySlugFromLabel(first)) : undefined;
+  }, [vendor]);
+
+  const gridWidth = (windowWidth - Spacing.three * 3) / 2;
+
+  const shareUrl = Linking.createURL(`/vendor/${id}`);
+  const shareText = vendor ? `Check out ${vendor.name} on WellnessXplora` : '';
+
+  const copyLink = async () => {
+    try {
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        await Share.share({ message: `${shareText}\n${shareUrl}`, url: shareUrl });
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* cancelled */
+    }
+  };
+
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.push('/explore');
+  };
+
+  const openWhatsApp = async () => {
+    if (!requireAuth(!!user, router, 'whatsapp')) return;
+    if (!vendor?.whatsapp) return;
+    await Linking.openURL(buildVendorWhatsAppUrl(vendor.whatsapp, vendor.name));
+  };
+
+  const saveRating = async () => {
+    if (!vendor || myRating < 1) return;
+    if (!requireAuth(!!user, router, 'rating') || !user) return;
+    setPosting(true);
+    try {
+      const stats = await setMyVendorReview({
+        vendorId: vendor.id,
+        userId: user.uid,
+        rating: myRating,
+        comment: commentText,
+        reviewerName: user.displayName || user.email?.split('@')[0] || 'Member',
+      });
+      setVendor((current) =>
+        current ? { ...current, rating: stats.rating, reviewCount: stats.reviewCount } : current,
+      );
+      setReviews(await fetchVendorReviews(vendor.id));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <ThemedView style={styles.centered}>
+        <ActivityIndicator />
+      </ThemedView>
+    );
+  }
+
+  if (error || !vendor) {
+    return (
+      <ThemedView style={styles.centered}>
+        <Pressable onPress={goBack} style={styles.fallbackBack}>
+          <ThemedText type="smallBold">Back</ThemedText>
+        </Pressable>
+        <ThemedText type="smallBold" style={styles.error}>
+          {error ?? 'Not found'}
+        </ThemedText>
+      </ThemedView>
+    );
+  }
+
+  const bio = vendor.description.trim();
+
+  return (
+    <ThemedView style={styles.screen}>
+      <ScrollView
+        {...scrollChrome}
+        contentContainerStyle={{ paddingBottom: insets.bottom + BottomTabInset + Spacing.five }}>
+        <View>
+          {vendor.coverUrl ? (
+            <Image source={{ uri: vendor.coverUrl }} style={styles.cover} contentFit="cover" />
+          ) : (
+            <View style={[styles.cover, { backgroundColor: theme.backgroundSelected }]} />
+          )}
+          <Pressable
+            onPress={goBack}
+            style={[
+              styles.backButton,
+              Shadows.button,
+              { top: insets.top + 8, backgroundColor: theme.backgroundElement },
+            ]}>
+            <Ionicons name="chevron-back" size={22} color={theme.text} />
+          </Pressable>
+        </View>
+
+        <View style={[styles.infoCard, { backgroundColor: theme.backgroundElement }]}>
+          <View style={styles.identityRow}>
+            {vendor.avatarUrl ? (
+              <Image source={{ uri: vendor.avatarUrl }} style={styles.avatar} contentFit="cover" />
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: theme.backgroundSelected }]} />
+            )}
+            <View style={styles.identityText}>
+              <ThemedText numberOfLines={2} style={styles.vendorName}>
+                {vendor.name}
+              </ThemedText>
+              <VendorTrustBadges
+                verified={vendor.verified}
+                foundingMember={vendor.foundingMember}
+                size="md"
+              />
+              <ListingRatingSummary
+                value={vendor.rating}
+                reviewCount={vendor.reviewCount}
+                size={12}
+              />
+              {backCategory ? (
+                <Pressable
+                  onPress={() => router.push(`/category/${backCategory.slug}`)}
+                  style={styles.backToCategory}>
+                  <Ionicons name="arrow-back" size={12} color={theme.tint} />
+                  <ThemedText type="small" style={[styles.categoryLink, { color: theme.tint }]}>
+                    Back to {backCategory.title}
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
+            <View style={styles.fabColumn}>
+              <Pressable
+                onPress={() => {
+                  if (!requireAuth(!!user, router, 'favorite')) return;
+                }}
+                style={[styles.heartFab, Shadows.button, { backgroundColor: HEART_BG }]}>
+                <Ionicons name="heart-outline" size={18} color={theme.text} />
+              </Pressable>
+              {vendor.whatsapp ? (
+                <Pressable
+                  onPress={() => void openWhatsApp()}
+                  style={[styles.whatsappFab, Shadows.button]}>
+                  <Ionicons name="chatbubble-ellipses" size={18} color="#FFFFFF" />
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={styles.tabRow}>
+            {([
+              ['bio', 'Bio', BIO],
+              ['share', 'Share', SHARE],
+              ['review', 'Review', REVIEW],
+            ] as const).map(([id, label, color], index) => {
+              const active = panel === id;
+              return (
+                <View key={id} style={styles.tabWrap}>
+                  {index > 0 ? (
+                    <ThemedText themeColor="textSecondary" style={styles.dot}>
+                      ·
+                    </ThemedText>
+                  ) : null}
+                  <Pressable hitSlop={8} onPress={() => setPanel((current) => (current === id ? null : id))}>
+                    <ThemedText
+                      type="smallBold"
+                      style={{
+                        color,
+                        textDecorationLine: active ? 'underline' : 'none',
+                        textDecorationColor: color,
+                      }}>
+                      {label}
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+          {panel ? <View style={[styles.tabRule, { backgroundColor: theme.backgroundSelected }]} /> : null}
+
+          {panel === 'bio' ? (
+            <View style={styles.panel}>
+              {primaryCategory ? (
+                <ThemedText type="smallBold" style={{ color: theme.tint }}>
+                  {primaryCategory.title}
+                </ThemedText>
+              ) : null}
+              {vendor.locationLabel ? (
+                <View style={styles.locationRow}>
+                  <Ionicons name="location-outline" size={16} color={theme.textSecondary} />
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.locationText}>
+                    {vendor.locationLabel}
+                  </ThemedText>
+                </View>
+              ) : null}
+              {bio ? (
+                <>
+                  <ThemedText
+                    type="small"
+                    themeColor="textSecondary"
+                    numberOfLines={bioExpanded ? 6 : 3}
+                    ellipsizeMode="tail"
+                    onTextLayout={(e) => {
+                      if (!bioExpanded) setBioTruncated(e.nativeEvent.lines.length >= 3);
+                    }}>
+                    {bio}
+                  </ThemedText>
+                  {bioTruncated || bioExpanded ? (
+                    <Pressable onPress={() => setBioExpanded((v) => !v)}>
+                      <ThemedText type="smallBold" style={{ color: theme.tint }}>
+                        {bioExpanded ? 'Show less' : 'Show more'}
+                      </ThemedText>
+                    </Pressable>
+                  ) : null}
+                </>
+              ) : (
+                <ThemedText type="small" themeColor="textSecondary">
+                  No bio yet.
+                </ThemedText>
+              )}
+            </View>
+          ) : null}
+
+          {panel === 'share' ? (
+            <View style={styles.panel}>
+              {(
+                [
+                  ['copy', copied ? 'Copied!' : 'Copy link', 'link-outline'],
+                  ['whatsapp', 'WhatsApp', 'logo-whatsapp'],
+                  ['message', 'Message', 'mail-outline'],
+                  ['facebook', 'Facebook', 'logo-facebook'],
+                  ['x', 'X (Twitter)', 'logo-twitter'],
+                ] as const
+              ).map(([id, label, icon]) => (
+                <Pressable
+                  key={id}
+                  onPress={() => {
+                    const encoded = encodeURIComponent(`${shareText} ${shareUrl}`);
+                    if (id === 'copy') void copyLink();
+                    else if (id === 'whatsapp') void Linking.openURL(`https://wa.me/?text=${encoded}`);
+                    else if (id === 'message') void Linking.openURL(`sms:?body=${encoded}`);
+                    else if (id === 'facebook') {
+                      void Linking.openURL(
+                        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
+                      );
+                    } else {
+                      void Linking.openURL(
+                        `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`,
+                      );
+                    }
+                  }}
+                  style={styles.shareRow}>
+                  <Ionicons name={icon} size={18} color={theme.text} />
+                  <ThemedText type="small">{label}</ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          {panel === 'review' ? (
+            <View style={[styles.reviewCard, { borderColor: theme.backgroundSelected }]}>
+              <ListingRatingSummary
+                value={vendor.rating}
+                reviewCount={vendor.reviewCount}
+                size={12}
+              />
+              <View style={[styles.reviewComposer, { backgroundColor: theme.background }]}>
+                <View style={styles.reviewerRow}>
+                  <StarRating
+                    value={myRating}
+                    size={22}
+                    interactive
+                    onChange={setMyRating}
+                  />
+                  <ThemedText type="smallBold">
+                    @{user?.displayName || user?.email?.split('@')[0] || 'you'}
+                  </ThemedText>
+                </View>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Optional note with your rating
+                </ThemedText>
+                <TextInput
+                  value={commentText}
+                  onChangeText={setCommentText}
+                  placeholder="What stood out about this vendor?"
+                  placeholderTextColor={theme.textSecondary}
+                  multiline
+                  style={[
+                    styles.commentInput,
+                    {
+                      color: theme.text,
+                      borderColor: theme.backgroundSelected,
+                      backgroundColor: theme.backgroundElement,
+                    },
+                  ]}
+                />
+                <Pressable
+                  disabled={posting || myRating < 1}
+                  onPress={() => void saveRating()}
+                  style={[
+                    styles.saveRating,
+                    { opacity: posting || myRating < 1 ? 0.45 : 1, backgroundColor: HEART_BG },
+                  ]}>
+                  {posting ? (
+                    <ActivityIndicator />
+                  ) : (
+                    <ThemedText type="smallBold">Save rating</ThemedText>
+                  )}
+                </Pressable>
+              </View>
+              {reviews.map((row) => (
+                <View key={row.id} style={styles.reviewRow}>
+                  <ThemedText type="smallBold">{row.reviewerName}</ThemedText>
+                  <StarRating value={row.rating} size={12} showValue />
+                  {row.comment ? (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {row.comment}
+                    </ThemedText>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.body}>
+          <ThemedText style={styles.productsTitle}>Products</ThemedText>
+
+          {listings.length === 0 ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              No active products yet.
+            </ThemedText>
+          ) : (
+            <View style={styles.productGrid}>
+              {listings.map((item) => (
+                <View key={item.id} style={{ width: gridWidth }}>
+                  <ExploreListingCard listing={item} grid hideVendor showDescription overlayActions fromVendor={vendor.id} />
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </ThemedView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.four,
+    gap: Spacing.three,
+  },
+  fallbackBack: { padding: Spacing.two },
+  cover: {
+    width: '100%',
+    height: 180,
+  },
+  backButton: {
+    position: 'absolute',
+    left: Spacing.three,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  body: {
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.four,
+    gap: Spacing.three,
+  },
+  infoCard: {
+    marginTop: -36,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.three,
+    paddingBottom: Spacing.three,
+    gap: Spacing.three,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
+  },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  identityText: {
+    flex: 1,
+    gap: 4,
+    paddingTop: 2,
+  },
+  vendorName: {
+    fontFamily: Fonts.serif,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '600',
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  backToCategory: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  categoryLink: {
+    fontSize: 12,
+    lineHeight: 16,
+    flexShrink: 1,
+  },
+  fabColumn: {
+    gap: Spacing.two,
+    paddingTop: 4,
+  },
+  heartFab: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  whatsappFab: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: WHATSAPP,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.two,
+  },
+  tabWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  dot: {
+    fontSize: 16,
+    lineHeight: 18,
+  },
+  tabRule: {
+    height: StyleSheet.hairlineWidth,
+    marginTop: -Spacing.two,
+  },
+  panel: {
+    gap: Spacing.two,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  locationText: {
+    flex: 1,
+  },
+  shareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: 8,
+  },
+  reviewCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  reviewComposer: {
+    borderRadius: 12,
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  reviewerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    flexWrap: 'wrap',
+  },
+  commentInput: {
+    minHeight: 72,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: Spacing.two,
+    textAlignVertical: 'top',
+    fontSize: 14,
+  },
+  saveRating: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  reviewRow: {
+    gap: 4,
+  },
+  productsTitle: {
+    fontFamily: Fonts.serif,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '600',
+    marginTop: Spacing.two,
+  },
+  productGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.three,
+    marginTop: Spacing.two,
+  },
+  error: {
+    color: '#B42318',
+    textAlign: 'center',
+  },
+});

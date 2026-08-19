@@ -9,18 +9,21 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#1A1C19',
+    /** Page chrome — CSS snow. Cards stay white via `backgroundElement`. */
+    background: '#FFFAFA',
+    backgroundElement: '#FFFFFF',
+    backgroundSelected: '#EEE8E8',
+    textSecondary: '#6B6F66',
+    tint: '#3D6B4F',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
+    text: '#F4F4F0',
+    background: '#121412',
+    backgroundElement: '#1C1E1B',
+    backgroundSelected: '#2A2D28',
     textSecondary: '#B0B4BA',
+    tint: '#8FBF9A',
   },
 } as const;
 
@@ -61,5 +64,43 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+/** Tab bar content height plus breathing room so lists aren't covered. */
+export const BottomTabInset = Platform.select({ ios: 72, android: 80, default: 72 }) ?? 72;
 export const MaxContentWidth = 800;
+
+/** Extra space under the last Explore item (on top of BottomTabInset + safe area). */
+export const ExploreBottomExtra = 8;
+
+/** Gap between Explore carousel sections, and before “Browse all categories”. */
+export const ExploreSectionGap = 32;
+
+/**
+ * Raised / pressed shadows. Tweak opacity, offset, and radius here.
+ * `buttonPressed` uses an inset shadow so active pills look pushed into the screen.
+ */
+export const Shadows = {
+  button: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.16,
+    shadowRadius: 3.5,
+    elevation: 4,
+    boxShadow: '0px 3px 5px rgba(0, 0, 0, 0.14)',
+  },
+  buttonPressed: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+    boxShadow: 'inset 0px 2px 4px rgba(0, 0, 0, 0.22)',
+  },
+  card: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    shadowOpacity: 0.14,
+    elevation: 5,
+    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.12)',
+  },
+} as const;

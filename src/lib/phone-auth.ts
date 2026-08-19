@@ -36,14 +36,17 @@ export function normalizePhoneForAuth(raw: string): string {
   }
 
   const digitsOnly = trimmed.replace(/\D/g, '');
+  if (digitsOnly.startsWith('0') && digitsOnly.length === 10) {
+    return `+233${digitsOnly.slice(1)}`;
+  }
   if (trimmed.startsWith('0') && digitsOnly.length >= 10) {
     return `+233${digitsOnly.slice(1)}`;
   }
-  if (trimmed.startsWith('233') && digitsOnly.length >= 12) {
+  if (digitsOnly.startsWith('233') && digitsOnly.length >= 12) {
     return `+${digitsOnly}`;
   }
 
-  return `+${digitsOnly}`;
+  return digitsOnly ? `+${digitsOnly}` : '';
 }
 
 /**
@@ -75,7 +78,7 @@ export async function sendPhoneCode(
   el.innerHTML = '';
 
   const verifier = new RecaptchaVerifier(auth, containerId, {
-    size: 'normal',
+    size: 'invisible',
     callback: () => {},
     'expired-callback': () => {},
   });
