@@ -55,7 +55,7 @@ export default function AppTabs() {
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
   const insets = useSafeAreaInsets();
   const tabBarHeight =
-    40 + Math.max(insets.bottom, Platform.OS === 'web' ? 8 : 0);
+    50 + Math.max(insets.bottom, Platform.OS === 'web' ? 8 : 0);
 
   return (
     <Tabs
@@ -72,7 +72,7 @@ export default function AppTabs() {
           right: 0,
           bottom: 0,
           height: tabBarHeight,
-          paddingTop: 4,
+          paddingTop: 6,
           paddingBottom: Math.max(insets.bottom, 8),
           backgroundColor: colors.backgroundElement,
           borderTopWidth: 0,

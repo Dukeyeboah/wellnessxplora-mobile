@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppHeader } from '@/components/app-header';
+import { ExploreCarouselSectionRow } from '@/components/explore-carousel-section';
 import { ExploreCategoryGrid } from '@/components/explore-category-grid';
 import { ExploreListingCard } from '@/components/explore-listing-card';
 import { ExploreVendorCard } from '@/components/explore-vendor-card';
@@ -65,6 +66,14 @@ const SUPER_CATEGORIES = [
   },
 ] as const;
 
+const CATEGORY_FILTER_OPTIONS = [
+  { id: ALL_CATS, label: 'all' },
+  ...SUPER_CATEGORIES.map((cat) => ({
+    id: cat.slug,
+    label: cat.slug === 'home-lifestyle' ? 'home' : cat.slug,
+  })),
+];
+
 type HubView = 'all' | 'products' | 'vendors';
 
 const VIEW_PILLS: {
@@ -85,8 +94,6 @@ export default function ExploreScreen() {
   const { resetChrome } = useChrome();
   const scrollChrome = useScrollChrome();
   const isMobile = Platform.OS !== 'web';
-  const [carouselWidth, setCarouselWidth] = useState(windowWidth);
-  const compactCardWidth = isMobile ? carouselWidth : 176;
 
   const [view, setView] = useState<HubView>('all');
   const [search, setSearch] = useState('');
@@ -225,7 +232,7 @@ export default function ExploreScreen() {
         </View>
 
         <View style={styles.pillsRow}>
-          {/* Pills centered in the full row */}
+          <View style={styles.pillsSide} />
           <View style={styles.pillsCenter}>
             {VIEW_PILLS.map((pill) => {
               const active = view === pill.id;
@@ -245,7 +252,7 @@ export default function ExploreScreen() {
                         : theme.backgroundElement,
                     },
                   ]}>
-                  <Ionicons name={pill.icon} size={13} color={active ? theme.tint : pill.tint} />
+                  <Ionicons name={pill.icon} size={11} color={active ? theme.tint : pill.tint} />
                   <ThemedText type="smallBold" style={styles.pillLabel}>
                     {pill.label}
                   </ThemedText>
@@ -253,25 +260,26 @@ export default function ExploreScreen() {
               );
             })}
           </View>
-          {/* Filter icon absolutely positioned to the right so it doesn't shift centering */}
-          {(view === 'products' || view === 'vendors') ? (
-            <Pressable
-              hitSlop={8}
-              onPress={() => setShowCategoryFilter((v) => !v)}
-              style={[
-                styles.filterIconBtn,
-                Shadows.button,
-                {
-                  backgroundColor: showCategoryFilter ? '#000000' : theme.backgroundElement,
-                },
-              ]}>
-              <Ionicons
-                name="options-outline"
-                size={16}
-                color={showCategoryFilter ? '#FFFFFF' : theme.textSecondary}
-              />
-            </Pressable>
-          ) : null}
+          <View style={styles.pillsSide}>
+            {view === 'products' || view === 'vendors' ? (
+              <Pressable
+                hitSlop={8}
+                onPress={() => setShowCategoryFilter((v) => !v)}
+                style={[
+                  styles.filterIconBtn,
+                  Shadows.button,
+                  {
+                    backgroundColor: showCategoryFilter ? '#000000' : theme.backgroundElement,
+                  },
+                ]}>
+                <Ionicons
+                  name="options-outline"
+                  size={14}
+                  color={showCategoryFilter ? '#FFFFFF' : theme.textSecondary}
+                />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
 
         {showCategoryFilter && (view === 'products' || view === 'vendors') ? (
@@ -280,34 +288,32 @@ export default function ExploreScreen() {
             showsHorizontalScrollIndicator={false}
             style={styles.catRowScroll}
             contentContainerStyle={styles.catRow}>
-            <Pressable
-              hitSlop={8}
-              onPress={() => setCategoryFilter(ALL_CATS)}
-              style={styles.catToggle}>
-              <ThemedText
-                style={[
-                  styles.catLabel,
-                  { color: categoryFilter === ALL_CATS ? '#D97706' : theme.textSecondary },
-                ]}>
-                all
-              </ThemedText>
-            </Pressable>
-            {SUPER_CATEGORIES.map((cat) => {
-              const active = categoryFilter === cat.slug;
+            {CATEGORY_FILTER_OPTIONS.map((option, index) => {
+              const active = categoryFilter === option.id;
               return (
-                <Pressable
-                  key={cat.slug}
-                  hitSlop={8}
-                  onPress={() => setCategoryFilter(active ? ALL_CATS : cat.slug)}
-                  style={styles.catToggle}>
-                  <ThemedText
-                    style={[
-                      styles.catLabel,
-                      { color: active ? '#D97706' : theme.textSecondary },
-                    ]}>
-                    {cat.title.toLowerCase()}
-                  </ThemedText>
-                </Pressable>
+                <View key={option.id} style={styles.catItem}>
+                  {index > 0 ? (
+                    <ThemedText themeColor="textSecondary" style={styles.catDot}>
+                      ·
+                    </ThemedText>
+                  ) : null}
+                  <Pressable
+                    hitSlop={8}
+                    onPress={() =>
+                      setCategoryFilter(active && option.id !== ALL_CATS ? ALL_CATS : option.id)
+                    }
+                    style={styles.catToggle}>
+                    <ThemedText
+                      style={[
+                        styles.catLabel,
+                        active && styles.catLabelActive,
+                        active && styles.catLabelUnderline,
+                        { color: active ? '#D97706' : theme.textSecondary },
+                      ]}>
+                      {option.label}
+                    </ThemedText>
+                  </Pressable>
+                </View>
               );
             })}
           </ScrollView>
@@ -373,46 +379,7 @@ export default function ExploreScreen() {
             </ThemedText>
           ) : (
             filteredCarousels.map((section) => (
-              <View key={section.slug} style={styles.section}>
-                <View style={styles.sectionCopy}>
-                  <ThemedText type="smallBold" style={styles.sectionTitle}>
-                    {section.title}
-                  </ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {section.subtitle}
-                  </ThemedText>
-                </View>
-                <ScrollView
-                  horizontal
-                  pagingEnabled={isMobile}
-                  decelerationRate={isMobile ? 'fast' : 'normal'}
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.carouselTrack}
-                  onLayout={(e) => {
-                    const next = Math.round(e.nativeEvent.layout.width);
-                    if (next > 0 && next !== carouselWidth) setCarouselWidth(next);
-                  }}
-                  contentContainerStyle={styles.carouselContent}>
-                  {section.listings.map((item, index) => (
-                    <View
-                      key={item.id}
-                      style={
-                        index < section.listings.length - 1
-                          ? isMobile
-                            ? undefined
-                            : styles.carouselItem
-                          : undefined
-                      }>
-                      <ExploreListingCard
-                        listing={item}
-                        compact
-                        fullBleed={isMobile}
-                        compactWidth={compactCardWidth}
-                      />
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
+              <ExploreCarouselSectionRow key={section.slug} section={section} />
             ))
           )}
 
@@ -567,63 +534,43 @@ const styles = StyleSheet.create({
   pillsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     paddingVertical: Spacing.one,
-    position: 'relative',
+  },
+  pillsSide: {
+    width: 32,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   pillsCenter: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.two,
+    gap: 6,
     justifyContent: 'center',
+    paddingRight: Spacing.one,
   },
   filterIconBtn: {
-    position: 'absolute',
-    right: 0,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
   },
   pillLabel: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  section: {
-    gap: Spacing.two,
-    alignSelf: 'stretch',
-  },
-  sectionCopy: {
-    paddingHorizontal: Spacing.three,
-    gap: Spacing.one,
+    fontSize: 11,
+    lineHeight: 14,
   },
   paddedBlock: {
     paddingHorizontal: Spacing.three,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    lineHeight: 24,
-  },
-  carouselTrack: {
-    width: '100%',
-    alignSelf: 'stretch',
-  },
-  carouselContent: {
-    paddingTop: Spacing.two,
-    paddingBottom: Spacing.three,
-    paddingHorizontal: 0,
-  },
-  carouselItem: {
-    marginRight: Spacing.three,
   },
   listGap: {
     height: Spacing.three,
@@ -637,7 +584,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 2,
     paddingBottom: 4,
-    gap: Spacing.three,
+    paddingHorizontal: Spacing.one,
+  },
+  catItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  catDot: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginHorizontal: 6,
   },
   catToggle: {
     paddingVertical: 2,
@@ -647,6 +603,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     fontWeight: '400',
+  },
+  catLabelActive: {
+    fontWeight: '600',
+  },
+  catLabelUnderline: {
+    textDecorationLine: 'underline',
+    textDecorationColor: '#D97706',
   },
   productGrid: {
     paddingTop: Spacing.two,
