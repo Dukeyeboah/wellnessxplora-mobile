@@ -13,13 +13,16 @@ import { Platform } from 'react-native';
 import { auth, db } from '@/lib/firebase';
 import { signInWithGoogleIdToken, signInWithGooglePopup } from '@/lib/google-auth';
 import { clearPhoneRecaptcha, normalizePhoneForAuth, sendPhoneCode } from '@/lib/phone-auth';
+import { fetchUserProfile, type UserProfile } from '@/lib/user-profile';
 
 export type UserRole = 'explorer' | 'vendor';
 
 type AuthContextValue = {
   user: User | null;
   userRole: UserRole | null;
+  userProfile: UserProfile | null;
   loading: boolean;
+  reloadUserProfile: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, role: UserRole) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
@@ -138,13 +141,26 @@ async function googlePopup() {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const loadProfile = useCallback(async (uid: string) => {
+    const profile = await fetchUserProfile(uid);
+    setUserProfile(profile);
+    if (profile) setUserRole(profile.role);
+  }, []);
+
+  const reloadUserProfile = useCallback(async () => {
+    if (!user) return;
+    await loadProfile(user.uid);
+  }, [loadProfile, user]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
         setUser(null);
         setUserRole(null);
+        setUserProfile(null);
         setLoading(false);
         return;
       }
@@ -153,6 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const role = await ensureProfile(currentUser);
         setUser(currentUser);
         setUserRole(role);
+        await loadProfile(currentUser.uid);
       } catch (err) {
         const code =
           typeof err === 'object' && err !== null && 'code' in err
@@ -161,6 +178,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (code === 'auth/no-app-profile' || code === 'auth/profile-exists') {
           setUser(null);
           setUserRole(null);
+          setUserProfile(null);
         }
       } finally {
         setLoading(false);
@@ -186,7 +204,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user,
       userRole,
+      userProfile,
       loading,
+      reloadUserProfile,
       login: async (email, password) => {
         pendingSignupRole = null;
         const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
@@ -238,10 +258,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout: async () => {
         pendingSignupRole = null;
         clearPhoneRecaptcha();
+        setUserProfile(null);
         await signOut(auth);
       },
     }),
-    [user, userRole, loading, finishAuth, loginWithGoogleIdTokenCb],
+    [user, userRole, userProfile, loading, reloadUserProfile, finishAuth, loginWithGoogleIdTokenCb],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

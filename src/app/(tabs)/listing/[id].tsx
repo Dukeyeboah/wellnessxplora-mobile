@@ -33,6 +33,9 @@ import {
   type ListingCommentRow,
 } from '@/lib/listing-feedback';
 import { requireAuth } from '@/lib/require-auth';
+import { useCartModal } from '@/lib/cart-modal';
+import { useCart } from '@/lib/cart-context';
+import { getListingFavoriteState, toggleListingFavorite } from '@/lib/toggle-favorite';
 import {
   fetchListingById,
   formatListingPrice,
@@ -52,6 +55,8 @@ export default function ListingDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { openAddToCart } = useCartModal();
+  const { isInCart } = useCart();
   const { resetChrome } = useChrome();
   const scrollChrome = useScrollChrome();
 
@@ -105,6 +110,10 @@ export default function ListingDetailScreen() {
           return;
         }
         setListing(row);
+        if (user) {
+          const saved = await getListingFavoriteState(user.uid, row.id);
+          if (!cancelled) setFavorited(saved);
+        }
         const [rows, mine] = await Promise.all([
           loadListingComments(id).catch(() => [] as ListingCommentRow[]),
           user ? getMyListingRating(id, user.uid).catch(() => null) : Promise.resolve(null),
@@ -173,9 +182,19 @@ export default function ListingDetailScreen() {
     }
   };
 
+  const fromVendor = firstParam(params.fromVendor);
+
   const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.push('/explore');
+    if (fromVendor) {
+      if (router.canGoBack()) router.back();
+      else router.push(`/vendor/${fromVendor}`);
+      return;
+    }
+    if (router.canGoBack()) {
+      router.dismissTo('/explore');
+      return;
+    }
+    router.replace('/explore');
   };
 
   if (loading) {
@@ -201,6 +220,7 @@ export default function ListingDetailScreen() {
 
   const description = listing.description.trim();
   const price = formatListingPrice(listing);
+  const inCart = isInCart(listing.vendorId, listing.id);
 
   return (
     <ThemedView style={styles.screen}>
@@ -232,8 +252,23 @@ export default function ListingDetailScreen() {
           </Pressable>
           <Pressable
             onPress={() => {
-              if (!requireAuth(!!user, router, 'favorite')) return;
-              setFavorited((v) => !v);
+              if (!listing || !user) {
+                requireAuth(!!user, router, 'favorite');
+                return;
+              }
+              void toggleListingFavorite(true, router, user.uid, {
+                listingId: listing.id,
+                vendorId: listing.vendorId,
+                listingTitle: listing.title,
+                listingType: listing.type,
+                vendorName: listing.vendorName,
+                category: listing.categoryTitle ?? '',
+                price: listing.price,
+                currency: listing.currency,
+                imageUrl: listing.imageUrl,
+              }).then((next) => {
+                if (typeof next === 'boolean') setFavorited(next);
+              });
             }}
             style={[
               styles.heartButton,
@@ -316,11 +351,32 @@ export default function ListingDetailScreen() {
             <View style={styles.iconActions}>
               <Pressable
                 onPress={() => {
-                  if (!requireAuth(!!user, router, 'cart')) return;
-                  router.push('/cart');
+                  openAddToCart({
+                    id: listing.id,
+                    title: listing.title,
+                    description: listing.description,
+                    price: listing.price,
+                    currency: listing.currency,
+                    imageUrl: listing.imageUrl,
+                    vendorId: listing.vendorId,
+                    vendorName: listing.vendorName,
+                    vendorAvatarUrl: listing.vendorAvatarUrl,
+                    vendorVerified: listing.vendorVerified,
+                    vendorFoundingMember: listing.vendorFoundingMember,
+                    ratingAvg: listing.ratingAvg,
+                    ratingCount: listing.ratingCount,
+                    categorySlug: listing.categorySlug,
+                  });
                 }}
-                style={[styles.iconButton, { backgroundColor: theme.backgroundSelected }]}>
-                <Ionicons name="cart-outline" size={20} color={theme.text} />
+                style={[
+                  styles.iconButton,
+                  { backgroundColor: inCart ? theme.tint : theme.backgroundSelected },
+                ]}>
+                <Ionicons
+                  name={inCart ? 'cart' : 'cart-outline'}
+                  size={20}
+                  color={inCart ? '#FFFFFF' : theme.text}
+                />
               </Pressable>
               <Pressable
                 onPress={() => void onShare()}

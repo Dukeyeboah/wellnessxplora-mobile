@@ -1,11 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image } from 'expo-image';
 import {
   BottomTabBar,
   type BottomTabBarProps,
 } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
-import { useEffect } from 'react';
-import { Platform, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -15,6 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ProfileMenuSheet } from '@/components/profile-menu-sheet';
+import { useAuth } from '@/lib/auth-context';
 import { useChrome } from '@/lib/chrome';
 
 function HidingTabBar(props: BottomTabBarProps) {
@@ -48,21 +51,94 @@ function HidingTabBar(props: BottomTabBarProps) {
 }
 
 /** Change this number to resize every bottom-tab icon. */
-const TAB_ICON_SIZE = 22;
+const TAB_ICON_SIZE = 20;
+const TAB_AVATAR_SIZE = 28;
+
+function TabIcon({
+  name,
+  color,
+  focused,
+  tint,
+}: {
+  name: keyof typeof Ionicons.glyphMap;
+  color: string;
+  focused: boolean;
+  tint: string;
+}) {
+  return (
+    <View
+      style={[
+        styles.tabIconWrap,
+        focused && { backgroundColor: tint },
+      ]}>
+      <Ionicons
+        name={name}
+        size={TAB_ICON_SIZE}
+        color={focused ? '#FFFFFF' : color}
+      />
+    </View>
+  );
+}
+
+function ProfileTabIcon({
+  color,
+  focused,
+  tint,
+  photoUrl,
+}: {
+  color: string;
+  focused: boolean;
+  tint: string;
+  photoUrl?: string;
+}) {
+  if (photoUrl) {
+    return (
+      <View
+        style={[
+          styles.tabIconWrap,
+          focused && { backgroundColor: tint },
+        ]}>
+        <Image
+          source={{ uri: photoUrl }}
+          style={[
+            styles.tabAvatar,
+            focused && styles.tabAvatarFocused,
+          ]}
+          contentFit="cover"
+        />
+      </View>
+    );
+  }
+
+  return (
+    <TabIcon
+      name="person-circle-outline"
+      color={color}
+      focused={focused}
+      tint={tint}
+    />
+  );
+}
 
 export default function AppTabs() {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
   const insets = useSafeAreaInsets();
+  const { user, userProfile } = useAuth();
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const tabBarHeight =
     50 + Math.max(insets.bottom, Platform.OS === 'web' ? 8 : 0);
 
+  const profilePhoto =
+    userProfile?.photoURL || user?.photoURL || undefined;
+
   return (
+    <>
     <Tabs
       tabBar={(props) => <HidingTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false, // Hide the label
+        tabBarShowLabel: false,
         tabBarActiveTintColor: colors.tint,
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarLabelStyle: styles.label,
@@ -89,12 +165,21 @@ export default function AppTabs() {
       <Tabs.Screen name='listing' options={{ href: null }} />
       <Tabs.Screen name='category' options={{ href: null }} />
       <Tabs.Screen name='vendor' options={{ href: null }} />
+      <Tabs.Screen name='dashboard' options={{ href: null }} />
+      <Tabs.Screen name='profile-edit' options={{ href: null }} />
+      <Tabs.Screen name='admin' options={{ href: null }} />
+      <Tabs.Screen name='admin-manage' options={{ href: null }} />
       <Tabs.Screen
         name='explore'
         options={{
           title: 'Explore',
-          tabBarIcon: ({ color }) => (
-            <Ionicons name='search-outline' size={TAB_ICON_SIZE} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name="search-outline"
+              color={color}
+              focused={focused}
+              tint={colors.tint}
+            />
           ),
         }}
       />
@@ -102,8 +187,13 @@ export default function AppTabs() {
         name='favorites'
         options={{
           title: 'Favorites',
-          tabBarIcon: ({ color }) => (
-            <Ionicons name='heart-outline' size={TAB_ICON_SIZE} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'heart' : 'heart-outline'}
+              color={color}
+              focused={focused}
+              tint={colors.tint}
+            />
           ),
         }}
       />
@@ -111,21 +201,41 @@ export default function AppTabs() {
         name='cart'
         options={{
           title: 'Cart',
-          tabBarIcon: ({ color }) => (
-            <Ionicons name='cart-outline' size={TAB_ICON_SIZE} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'cart' : 'cart-outline'}
+              color={color}
+              focused={focused}
+              tint={colors.tint}
+            />
           ),
         }}
       />
       <Tabs.Screen
         name='profile'
+        listeners={{
+          tabPress: (e) => {
+            if (user) {
+              e.preventDefault();
+              setProfileMenuOpen(true);
+            }
+          },
+        }}
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => (
-            <Ionicons name='person-circle-outline' size={TAB_ICON_SIZE} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <ProfileTabIcon
+              color={color}
+              focused={focused}
+              tint={colors.tint}
+              photoUrl={user ? profilePhoto : undefined}
+            />
           ),
         }}
       />
     </Tabs>
+    <ProfileMenuSheet visible={profileMenuOpen} onClose={() => setProfileMenuOpen(false)} />
+    </>
   );
 }
 
@@ -133,5 +243,21 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 9,
     fontWeight: '600',
+  },
+  tabIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabAvatar: {
+    width: TAB_AVATAR_SIZE,
+    height: TAB_AVATAR_SIZE,
+    borderRadius: TAB_AVATAR_SIZE / 2,
+  },
+  tabAvatarFocused: {
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
 });

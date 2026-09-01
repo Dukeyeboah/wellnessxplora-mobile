@@ -38,6 +38,7 @@ import {
 } from '@/lib/listings';
 import { buildVendorWhatsAppUrl } from '@/lib/vendor-contact';
 import { requireAuth } from '@/lib/require-auth';
+import { getVendorFavoriteState, toggleVendorFavorite } from '@/lib/toggle-favorite';
 import {
   fetchVendorReviews,
   getMyVendorReview,
@@ -75,6 +76,7 @@ export default function VendorDetailScreen() {
   const [commentText, setCommentText] = useState('');
   const [posting, setPosting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [favorited, setFavorited] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -101,6 +103,10 @@ export default function VendorDetailScreen() {
           else {
             setVendor(vendorRow);
             setListings(vendorListings);
+            if (user) {
+              const saved = await getVendorFavoriteState(user.uid, id);
+              if (!cancelled) setFavorited(saved);
+            }
             const [rows, mine] = await Promise.all([
               fetchVendorReviews(id).catch(() => [] as PublicVendorReview[]),
               user ? getMyVendorReview(id, user.uid).catch(() => null) : Promise.resolve(null),
@@ -270,10 +276,33 @@ export default function VendorDetailScreen() {
             <View style={styles.fabColumn}>
               <Pressable
                 onPress={() => {
-                  if (!requireAuth(!!user, router, 'favorite')) return;
+                  if (!vendor || !user) {
+                    requireAuth(!!user, router, 'favorite');
+                    return;
+                  }
+                  const categorySlug =
+                    vendor.categories[0] != null
+                      ? categorySlugFromLabel(vendor.categories[0])
+                      : '';
+                  void toggleVendorFavorite(true, router, user.uid, {
+                    vendorId: vendor.id,
+                    vendorName: vendor.name,
+                    category: primaryCategory?.title ?? vendor.categories[0] ?? '',
+                    categorySlug,
+                    location: vendor.locationLabel ?? vendor.city ?? '',
+                    imageUrl: vendor.avatarUrl,
+                    verified: vendor.verified,
+                    foundingMember: vendor.foundingMember,
+                  }).then((next) => {
+                    if (typeof next === 'boolean') setFavorited(next);
+                  });
                 }}
                 style={[styles.heartFab, Shadows.button, { backgroundColor: HEART_BG }]}>
-                <Ionicons name="heart-outline" size={18} color={theme.text} />
+                <Ionicons
+                  name={favorited ? 'heart' : 'heart-outline'}
+                  size={18}
+                  color={favorited ? '#E11D48' : theme.text}
+                />
               </Pressable>
               {vendor.whatsapp ? (
                 <Pressable

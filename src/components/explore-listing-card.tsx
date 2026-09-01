@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -12,6 +13,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { formatListingPrice, type ExploreListing } from '@/lib/listings';
 import { requireAuth } from '@/lib/require-auth';
+import { getListingFavoriteState, toggleListingFavorite } from '@/lib/toggle-favorite';
+import { useCartModal } from '@/lib/cart-modal';
+import { useCart } from '@/lib/cart-context';
 
 type Props = {
   listing: ExploreListing;
@@ -50,15 +54,29 @@ export function ExploreListingCard({
   const theme = useTheme();
   const router = useRouter();
   const { user } = useAuth();
+  const { openAddToCart } = useCartModal();
+  const { isInCart } = useCart();
+  const [favorited, setFavorited] = useState(false);
   const price = formatListingPrice(listing);
   const description = listing.description.trim();
   const showVendor = !hideVendor && !list;
   const useOverlay = overlayActions || compact || fullBleed;
 
-  const openListing = () =>
-    router.push(
-      fromVendor ? `/listing/${listing.id}?fromVendor=${fromVendor}` : `/listing/${listing.id}`,
-    );
+  useEffect(() => {
+    if (!user) {
+      setFavorited(false);
+      return;
+    }
+    void getListingFavoriteState(user.uid, listing.id).then(setFavorited);
+  }, [user, listing.id]);
+
+  const openListing = () => {
+    const path = fromVendor
+      ? `/listing/${listing.id}?fromVendor=${fromVendor}`
+      : `/listing/${listing.id}`;
+    if (fromVendor) router.push(path as never);
+    else router.replace(path as never);
+  };
 
   const openVendor = () => {
     if (!listing.vendorId) return;
@@ -66,12 +84,32 @@ export function ExploreListingCard({
   };
 
   const onFavorite = () => {
-    requireAuth(!!user, router, 'favorite');
+    if (!user) {
+      requireAuth(false, router, 'favorite');
+      return;
+    }
+    void toggleListingFavorite(!!user, router, user.uid, {
+      listingId: listing.id,
+      vendorId: listing.vendorId,
+      listingTitle: listing.title,
+      listingType: 'product',
+      vendorName: listing.vendorName,
+      category: listing.categorySlug ?? '',
+      price: listing.price,
+      currency: listing.currency,
+      imageUrl: listing.imageUrl,
+    }).then((next) => {
+      if (typeof next === 'boolean') setFavorited(next);
+    });
   };
 
   const onAddToCart = () => {
-    requireAuth(!!user, router, 'cart');
+    openAddToCart(listing);
   };
+
+  const inCart = listing.vendorId
+    ? isInCart(listing.vendorId, listing.id)
+    : false;
 
   const imageOverlay = useOverlay ? (
     <>
@@ -79,13 +117,25 @@ export function ExploreListingCard({
         hitSlop={8}
         onPress={onFavorite}
         style={[styles.overlayBtn, styles.overlayLeft, { backgroundColor: theme.background }]}>
-        <Ionicons name="heart-outline" size={grid ? 14 : 16} color={theme.text} />
+        <Ionicons
+          name={favorited ? 'heart' : 'heart-outline'}
+          size={grid ? 14 : 16}
+          color={favorited ? '#E11D48' : theme.text}
+        />
       </Pressable>
       <Pressable
         hitSlop={8}
         onPress={onAddToCart}
-        style={[styles.overlayBtn, styles.overlayRight, { backgroundColor: theme.background }]}>
-        <Ionicons name="cart-outline" size={grid ? 14 : 16} color={theme.text} />
+        style={[
+          styles.overlayBtn,
+          styles.overlayRight,
+          { backgroundColor: inCart ? theme.tint : theme.background },
+        ]}>
+        <Ionicons
+          name={inCart ? 'cart' : 'cart-outline'}
+          size={grid ? 14 : 16}
+          color={inCart ? '#FFFFFF' : theme.text}
+        />
       </Pressable>
     </>
   ) : (
@@ -93,7 +143,11 @@ export function ExploreListingCard({
       hitSlop={8}
       onPress={onFavorite}
       style={[styles.overlayBtn, styles.overlayRight, { backgroundColor: theme.background }]}>
-      <Ionicons name="heart-outline" size={grid ? 14 : 16} color={theme.text} />
+      <Ionicons
+        name={favorited ? 'heart' : 'heart-outline'}
+        size={grid ? 14 : 16}
+        color={favorited ? '#E11D48' : theme.text}
+      />
     </Pressable>
   );
 

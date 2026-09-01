@@ -12,11 +12,11 @@ import {
 } from 'react-native';
 import type { ConfirmationResult } from 'firebase/auth';
 import { Image } from 'expo-image';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { AppHeader } from '@/components/app-header';
+import { AccountMenuRow } from '@/components/account-menu-row';
 import { AppearanceSettingsCard } from '@/components/appearance-settings-card';
 import { AuthCategoryBackdrop } from '@/components/auth-category-backdrop';
 import { GoogleAuthButton } from '@/components/google-auth-button';
@@ -42,11 +42,13 @@ const LOGO = require('@/assets/images/logo.png');
 export default function ProfileScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { height: windowHeight } = useWindowDimensions();
   const { auth: authParam } = useLocalSearchParams<{ auth?: string }>();
   const {
     user,
     userRole,
+    userProfile,
     loading,
     login,
     signup,
@@ -190,7 +192,18 @@ export default function ProfileScreen() {
 
   return (
     <ThemedView style={styles.screen}>
-      {user ? <AppHeader title="Profile" /> : null}
+      {user ? (
+        <View style={[styles.accountHeader, { paddingTop: insets.top + Spacing.two }]}>
+          <View style={styles.accountHeaderSpacer} />
+          <View style={styles.accountHeaderCenter}>
+            <Ionicons name="settings-outline" size={18} color={theme.tint} />
+            <ThemedText type="smallBold" style={styles.accountHeaderTitle}>
+              Account
+            </ThemedText>
+          </View>
+          <View style={styles.accountHeaderSpacer} />
+        </View>
+      ) : null}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}>
@@ -209,23 +222,78 @@ export default function ProfileScreen() {
             keyboardShouldPersistTaps="handled">
             {user ? (
               <View style={styles.accountStack}>
-                <ThemedView type="backgroundElement" style={[styles.card, Shadows.card]}>
-                  <ThemedText type="smallBold">Signed in</ThemedText>
-                  <ThemedText type="code">{user.email ?? user.phoneNumber}</ThemedText>
-                  {userRole ? (
-                    <ThemedText type="small" themeColor="textSecondary">
-                      Role: {userRole}
-                    </ThemedText>
-                  ) : null}
-                  <Pressable
-                    onPress={() => logout()}
-                    style={({ pressed }) => [
-                      styles.outlineButton,
-                      { borderColor: theme.textSecondary, opacity: pressed ? 0.7 : 1 },
-                    ]}>
-                    <ThemedText type="smallBold">Sign out</ThemedText>
-                  </Pressable>
+                <ThemedView type="backgroundElement" style={[styles.card, styles.identityCard, Shadows.card]}>
+                  <View style={styles.identityRow}>
+                    {userProfile?.photoURL || user.photoURL ? (
+                      <Image
+                        source={{ uri: userProfile?.photoURL || user.photoURL || '' }}
+                        style={styles.accountAvatar}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View style={[styles.accountAvatar, { backgroundColor: theme.backgroundSelected }]}>
+                        <Ionicons name="person" size={28} color={theme.textSecondary} />
+                      </View>
+                    )}
+                    <View style={styles.identityCopy}>
+                      <ThemedText type="smallBold" style={styles.accountName}>
+                        {userProfile?.username
+                          ? `@${userProfile.username}`
+                          : userProfile?.name || user.displayName || 'Account'}
+                      </ThemedText>
+                      <ThemedText
+                        type="small"
+                        themeColor="textSecondary"
+                        style={styles.accountEmail}>
+                        {user.email ?? user.phoneNumber}
+                      </ThemedText>
+                      {userRole ? (
+                        <ThemedText
+                          type="small"
+                          style={{
+                            color: userRole === 'vendor' ? '#0284C7' : '#B45309',
+                            fontSize: 12,
+                            marginTop: 2,
+                          }}>
+                          {userRole === 'vendor' ? 'Vendor account' : 'Explorer account'}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                  </View>
                 </ThemedView>
+
+                {userRole === 'vendor' ? (
+                  <AccountMenuRow
+                    icon="grid-outline"
+                    label="Dashboard"
+                    subtitle="Manage listings and storefront"
+                    onPress={() => router.push('/dashboard' as never)}
+                  />
+                ) : null}
+                <AccountMenuRow
+                  icon="heart-outline"
+                  label="Favorites"
+                  subtitle="Saved products and vendors"
+                  onPress={() => router.push('/favorites')}
+                />
+                <AccountMenuRow
+                  icon="cart-outline"
+                  label="Cart"
+                  subtitle="WhatsApp order cart"
+                  onPress={() => router.push('/cart')}
+                />
+                <AccountMenuRow
+                  icon="person-outline"
+                  label="Edit profile"
+                  subtitle="Photo, contact, and location"
+                  onPress={() => router.push('/profile-edit' as never)}
+                />
+                <AccountMenuRow
+                  icon="log-out-outline"
+                  label="Sign out"
+                  destructive
+                  onPress={() => void logout()}
+                />
                 <AppearanceSettingsCard />
               </View>
             ) : (
@@ -243,10 +311,9 @@ export default function ProfileScreen() {
 
                 {authScreen === 'signup' ? (
                   <View style={styles.roleBlock}>
-                    <ThemedText type="smallBold">Select account type</ThemedText>
-                    {/* <ThemedText type="small" themeColor="textSecondary">
-                      Pick how you want to use WellnessXplora before continuing.
-                    </ThemedText> */}
+                    <ThemedText type="smallBold" style={styles.roleHeading}>
+                      Select account type
+                    </ThemedText>
                     <View style={styles.roleRow}>
                       <Pressable
                         onPress={() => {
@@ -262,8 +329,10 @@ export default function ProfileScreen() {
                               accountType === 'vendor' ? '#FFF8E8' : theme.backgroundElement,
                           },
                         ]}>
-                        <ThemedText type="smallBold">Vendor (seller)</ThemedText>
-                        <ThemedText type="small" themeColor="textSecondary">
+                        <ThemedText type="smallBold" style={styles.roleCardText}>
+                          Vendor (seller)
+                        </ThemedText>
+                        <ThemedText type="small" themeColor="textSecondary" style={styles.roleCardText}>
                           List your business
                         </ThemedText>
                       </Pressable>
@@ -281,13 +350,21 @@ export default function ProfileScreen() {
                               accountType === 'explorer' ? '#F0F7FC' : theme.backgroundElement,
                           },
                         ]}>
-                        <ThemedText type="smallBold">Explorer (buyer)</ThemedText>
-                        <ThemedText type="small" themeColor="textSecondary">
+                        <ThemedText type="smallBold" style={styles.roleCardText}>
+                          Explorer (buyer)
+                        </ThemedText>
+                        <ThemedText type="small" themeColor="textSecondary" style={styles.roleCardText}>
                           Browse & discover
                         </ThemedText>
                       </Pressable>
                     </View>
                   </View>
+                ) : null}
+
+                {authScreen === 'signup' && !accountType ? (
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
+                    Select an account type to sign up
+                  </ThemedText>
                 ) : null}
 
                 <GoogleAuthButton
@@ -298,11 +375,6 @@ export default function ProfileScreen() {
                   loading={submitting && method === null}
                   onPress={() => void onGoogle()}
                 />
-                {authScreen === 'signup' && !accountType ? (
-                  <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-                    Select an account type above to unlock sign up
-                  </ThemedText>
-                ) : null}
 
                 <View style={styles.dividerRow}>
                   <View style={[styles.divider, { backgroundColor: theme.backgroundSelected }]} />
@@ -545,6 +617,52 @@ const styles = StyleSheet.create({
   accountStack: {
     gap: Spacing.three,
   },
+  accountHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.four,
+    paddingBottom: Spacing.two,
+  },
+  accountHeaderSpacer: {
+    width: 40,
+  },
+  accountHeaderCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  accountHeaderTitle: {
+    fontSize: 16,
+  },
+  identityCard: {
+    gap: Spacing.two,
+  },
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  identityCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  accountAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountName: {
+    fontSize: 16,
+    textAlign: 'left',
+  },
+  accountEmail: {
+    textAlign: 'left',
+    fontStyle: 'italic',
+  },
   logo: {
     width: 72,
     height: 72,
@@ -563,6 +681,9 @@ const styles = StyleSheet.create({
   roleBlock: {
     gap: Spacing.two,
   },
+  roleHeading: {
+    textAlign: 'center',
+  },
   roleRow: {
     flexDirection: 'row',
     gap: Spacing.two,
@@ -573,10 +694,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: Spacing.three,
     gap: 4,
+    alignItems: 'center',
+  },
+  roleCardText: {
+    textAlign: 'center',
   },
   hint: {
     textAlign: 'center',
-    marginTop: -Spacing.two,
   },
   dividerRow: {
     flexDirection: 'row',

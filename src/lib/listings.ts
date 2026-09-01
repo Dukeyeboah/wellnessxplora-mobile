@@ -420,6 +420,8 @@ export type ExploreVendorDetail = ExploreVendor & {
   description: string;
   coverUrl: string;
   whatsapp?: string;
+  phone?: string;
+  showWhatsappPublic?: boolean;
   rating: number;
   reviewCount: number;
   locationLabel?: string;
@@ -484,6 +486,10 @@ export async function fetchVendorById(id: string): Promise<ExploreVendorDetail |
       : typeof contact.whatsapp === 'string' && contact.whatsapp.trim()
         ? contact.whatsapp.trim()
         : undefined;
+  const phone =
+    typeof contact.phone === 'string' && contact.phone.trim()
+      ? contact.phone.trim()
+      : undefined;
 
   return {
     id: snap.id,
@@ -499,6 +505,8 @@ export async function fetchVendorById(id: string): Promise<ExploreVendorDetail |
       typeof images.cover === 'string' ? images.cover : '',
     ),
     whatsapp,
+    phone,
+    showWhatsappPublic: contact.showWhatsappPublic !== false,
     rating: typeof data.rating === 'number' ? data.rating : Number(data.rating ?? 0) || 0,
     reviewCount:
       typeof data.reviewCount === 'number'

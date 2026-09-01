@@ -5,6 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AuthProvider } from '@/lib/auth-context';
+import { CartProvider } from '@/lib/cart-context';
+import { CartModalProvider } from '@/lib/cart-modal';
 import { SignInModalProvider } from '@/lib/sign-in-modal';
 import { ThemePreferenceProvider, useThemePreference } from '@/lib/theme-preference';
 
@@ -29,7 +31,11 @@ export default function RootLayout() {
     <ThemePreferenceProvider>
       <AuthProvider>
         <SignInModalProvider>
-          <RootNavigator />
+          <CartProvider>
+            <CartModalProvider>
+              <RootNavigator />
+            </CartModalProvider>
+          </CartProvider>
         </SignInModalProvider>
       </AuthProvider>
     </ThemePreferenceProvider>
