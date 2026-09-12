@@ -45,7 +45,7 @@ export function StoriesRail({
   createAuthorPhotoURL,
   createVendorId,
 }: Props) {
-  const theme = useTheme();
+  const colors = useTheme();
   const { user, loading: authLoading } = useAuth();
   const { showSignInModal } = useSignInModal();
   const [groups, setGroups] = useState<StoryAuthorGroup[]>([]);
@@ -125,8 +125,8 @@ export function StoriesRail({
               style={[
                 styles.addCircle,
                 {
-                  borderColor: theme.backgroundSelected,
-                  backgroundColor: theme.backgroundElement,
+                  borderColor: colors.backgroundSelected,
+                  backgroundColor: colors.backgroundElement,
                 },
               ]}>
               {canCreate && createAuthorType === 'wellnessxplora' ? (
@@ -134,10 +134,10 @@ export function StoriesRail({
               ) : selfPhoto ? (
                 <Image source={{ uri: selfPhoto }} style={styles.avatarImg} contentFit="cover" />
               ) : (
-                <Ionicons name="person" size={26} color={theme.textSecondary} />
+                <Ionicons name="person" size={26} color={colors.textSecondary} />
               )}
             </View>
-            <View style={[styles.plusBadge, { backgroundColor: theme.tint, borderColor: theme.background }]}>
+            <View style={[styles.plusBadge, { backgroundColor: colors.tint, borderColor: colors.background }]}>
               <Ionicons name="add" size={14} color="#FFFFFF" />
             </View>
           </View>
@@ -149,9 +149,9 @@ export function StoriesRail({
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
               <View key={`sk-${i}`} style={styles.item}>
-                <View style={[styles.skeleton, { backgroundColor: theme.backgroundSelected }]} />
+                <View style={[styles.skeleton, { backgroundColor: colors.backgroundSelected }]} />
                 <View
-                  style={[styles.skeletonLabel, { backgroundColor: theme.backgroundSelected }]}
+                  style={[styles.skeletonLabel, { backgroundColor: colors.backgroundSelected }]}
                 />
               </View>
             ))
@@ -168,7 +168,7 @@ export function StoriesRail({
                   onPress={() => setViewerIndex(index)}
                   style={styles.item}>
                   <View style={styles.gradientRing}>
-                    <View style={[styles.innerRing, { backgroundColor: theme.background }]}>
+                    <View style={[styles.innerRing, { backgroundColor: colors.background }]}>
                       {group.authorType === 'wellnessxplora' ? (
                         <Image source={WX_LOGO} style={styles.avatarImg} contentFit="cover" />
                       ) : photo ? (
@@ -178,7 +178,7 @@ export function StoriesRail({
                           style={[
                             styles.avatarImg,
                             {
-                              backgroundColor: theme.backgroundSelected,
+                              backgroundColor: colors.backgroundSelected,
                               alignItems: 'center',
                               justifyContent: 'center',
                             },
