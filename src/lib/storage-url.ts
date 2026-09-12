@@ -16,6 +16,8 @@ function isStorageObjectPath(value: string): boolean {
     trimmed.startsWith('users/') ||
     trimmed.startsWith('vendors/') ||
     trimmed.startsWith('listings/') ||
+    trimmed.startsWith('posts/') ||
+    trimmed.startsWith('stories/') ||
     trimmed.startsWith('verification/')
   );
 }

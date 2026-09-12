@@ -49,7 +49,7 @@ function firstParam(value?: string | string[]) {
 }
 
 export default function ListingDetailScreen() {
-  const params = useLocalSearchParams<{ id: string; fromVendor?: string }>();
+  const params = useLocalSearchParams<{ id: string; fromVendor?: string; from?: string }>();
   const id = firstParam(params.id);
   const theme = useTheme();
   const router = useRouter();
@@ -183,11 +183,17 @@ export default function ListingDetailScreen() {
   };
 
   const fromVendor = firstParam(params.fromVendor);
+  const from = firstParam(params.from);
 
   const goBack = () => {
     if (fromVendor) {
       if (router.canGoBack()) router.back();
       else router.push(`/vendor/${fromVendor}`);
+      return;
+    }
+    if (from === 'discover') {
+      if (router.canGoBack()) router.back();
+      else router.replace('/discover');
       return;
     }
     if (router.canGoBack()) {

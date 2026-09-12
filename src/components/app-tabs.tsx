@@ -19,6 +19,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ProfileMenuSheet } from '@/components/profile-menu-sheet';
 import { useAuth } from '@/lib/auth-context';
 import { useChrome } from '@/lib/chrome';
+import { useCreatePost } from '@/lib/create-post-modal';
 
 function HidingTabBar(props: BottomTabBarProps) {
   const { tabBarVisible } = useChrome();
@@ -80,6 +81,14 @@ function TabIcon({
   );
 }
 
+function CreateTabIcon({ tint }: { tint: string }) {
+  return (
+    <View style={styles.tabIconWrap}>
+      <Ionicons name="add" size={26} color={tint} />
+    </View>
+  );
+}
+
 function ProfileTabIcon({
   color,
   focused,
@@ -125,6 +134,7 @@ export default function AppTabs() {
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
   const insets = useSafeAreaInsets();
   const { user, userProfile } = useAuth();
+  const { openCreatePost } = useCreatePost();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const tabBarHeight =
     50 + Math.max(insets.bottom, Platform.OS === 'web' ? 8 : 0);
@@ -165,10 +175,26 @@ export default function AppTabs() {
       <Tabs.Screen name='listing' options={{ href: null }} />
       <Tabs.Screen name='category' options={{ href: null }} />
       <Tabs.Screen name='vendor' options={{ href: null }} />
+      <Tabs.Screen name='post' options={{ href: null }} />
       <Tabs.Screen name='dashboard' options={{ href: null }} />
       <Tabs.Screen name='profile-edit' options={{ href: null }} />
       <Tabs.Screen name='admin' options={{ href: null }} />
       <Tabs.Screen name='admin-manage' options={{ href: null }} />
+      <Tabs.Screen name='cart' options={{ href: null }} />
+      <Tabs.Screen
+        name='discover'
+        options={{
+          title: 'Discover',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? 'compass' : 'compass-outline'}
+              color={color}
+              focused={focused}
+              tint={colors.tint}
+            />
+          ),
+        }}
+      />
       <Tabs.Screen
         name='explore'
         options={{
@@ -184,26 +210,25 @@ export default function AppTabs() {
         }}
       />
       <Tabs.Screen
-        name='favorites'
+        name='create'
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            openCreatePost();
+          },
+        }}
         options={{
-          title: 'Favorites',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon
-              name={focused ? 'heart' : 'heart-outline'}
-              color={color}
-              focused={focused}
-              tint={colors.tint}
-            />
-          ),
+          title: 'Create',
+          tabBarIcon: () => <CreateTabIcon tint={colors.tint} />,
         }}
       />
       <Tabs.Screen
-        name='cart'
+        name='favorites'
         options={{
-          title: 'Cart',
+          title: 'Saved',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
-              name={focused ? 'cart' : 'cart-outline'}
+              name={focused ? 'bookmark' : 'bookmark-outline'}
               color={color}
               focused={focused}
               tint={colors.tint}

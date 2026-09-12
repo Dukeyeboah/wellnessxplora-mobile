@@ -11,7 +11,10 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["whatsapp", "whatsapp-api"]
+        "LSApplicationQueriesSchemes": [
+          "whatsapp",
+          "whatsapp-api"
+        ]
       }
     },
     "android": {
@@ -38,7 +41,8 @@
           "imageWidth": 76
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

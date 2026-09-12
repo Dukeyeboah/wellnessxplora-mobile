@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AccountScrollScreen } from '@/components/account-scroll-screen';
 import { ExploreListingCard } from '@/components/explore-listing-card';
 import { ExploreVendorCard } from '@/components/explore-vendor-card';
+import { FeedPostCard } from '@/components/feed-post-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Shadows, Spacing } from '@/constants/theme';
@@ -32,9 +33,11 @@ import {
   type ListingBookmark,
   type VendorBookmark,
 } from '@/lib/bookmarks';
+import type { FeedPost } from '@/lib/feed-posts';
 import type { ExploreListing, ExploreVendor } from '@/lib/listings';
+import { fetchUserSavedPosts, unsavePost } from '@/lib/post-engagement';
 
-type SavedTypeFilter = 'all' | 'vendor' | 'listing';
+type SavedTypeFilter = 'all' | 'vendor' | 'listing' | 'post';
 
 export default function FavoritesScreen() {
   const theme = useTheme();
@@ -47,6 +50,7 @@ export default function FavoritesScreen() {
   const [lists, setLists] = useState<BookmarkList[]>([]);
   const [vendorBookmarks, setVendorBookmarks] = useState<VendorBookmark[]>([]);
   const [listingBookmarks, setListingBookmarks] = useState<ListingBookmark[]>([]);
+  const [savedPosts, setSavedPosts] = useState<FeedPost[]>([]);
   const [typeFilter, setTypeFilter] = useState<SavedTypeFilter>('all');
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -55,10 +59,11 @@ export default function FavoritesScreen() {
   const load = useCallback(async () => {
     if (!user) return;
     try {
-      const [l, vendorsRaw, listingsRaw] = await Promise.all([
+      const [l, vendorsRaw, listingsRaw, posts] = await Promise.all([
         fetchBookmarkLists(user.uid),
         fetchUserBookmarks(user.uid),
         fetchUserListingBookmarks(user.uid),
+        fetchUserSavedPosts(user.uid),
       ]);
       const [vendors, listings] = await Promise.all([
         enrichVendorBookmarks(vendorsRaw),
@@ -67,6 +72,7 @@ export default function FavoritesScreen() {
       setLists(l);
       setVendorBookmarks(vendors);
       setListingBookmarks(listings);
+      setSavedPosts(posts);
     } catch (err) {
       console.error(err);
     } finally {
@@ -109,10 +115,25 @@ export default function FavoritesScreen() {
     );
   }, [listingBookmarks, selectedListId, search]);
 
+  const postsInView = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return savedPosts;
+    return savedPosts.filter(
+      (p) =>
+        p.caption.toLowerCase().includes(q) ||
+        p.authorName.toLowerCase().includes(q) ||
+        p.categorySlugs.some((s) => s.toLowerCase().includes(q)),
+    );
+  }, [savedPosts, search]);
+
   const showVendors = typeFilter === 'all' || typeFilter === 'vendor';
   const showListings = typeFilter === 'all' || typeFilter === 'listing';
+  const showPosts = typeFilter === 'all' || typeFilter === 'post';
   const isEmpty =
-    (showVendors ? vendorsInView.length : 0) + (showListings ? listingsInView.length : 0) === 0;
+    (showVendors ? vendorsInView.length : 0) +
+      (showListings ? listingsInView.length : 0) +
+      (showPosts ? postsInView.length : 0) ===
+    0;
 
   const sticky = (
     <View style={[styles.stickyInner, { backgroundColor: theme.background }]}>
@@ -133,6 +154,7 @@ export default function FavoritesScreen() {
             ['all', 'All', 'grid-outline', '#E11D48'],
             ['listing', 'Products', 'bag-handle-outline', '#3D6B4F'],
             ['vendor', 'Vendors', 'storefront-outline', '#0284C7'],
+            ['post', 'Posts', 'newspaper-outline', '#D97706'],
           ] as const).map(([id, label, icon, tint]) => {
             const active = typeFilter === id;
             return (
@@ -218,7 +240,7 @@ export default function FavoritesScreen() {
             Save products you love
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" style={styles.guestCopy}>
-            Sign in to save your favorite products and vendors.
+            Sign in to save posts, products, and vendors.
           </ThemedText>
           <Pressable
             onPress={() => router.push('/profile?auth=signup')}
@@ -255,8 +277,27 @@ export default function FavoritesScreen() {
       }}>
       {isEmpty ? (
         <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
-          No saved items yet. Tap the heart on a product or vendor to add it here.
+          No saved items yet. Bookmark a post or tap the heart on a product or vendor.
         </ThemedText>
+      ) : null}
+
+      {showPosts && postsInView.length > 0 ? (
+        <View style={styles.section}>
+          {postsInView.map((post) => (
+            <View key={post.id} style={styles.savedRow}>
+              <FeedPostCard post={post} />
+              <Pressable
+                hitSlop={8}
+                onPress={() => {
+                  if (!user) return;
+                  void unsavePost(user.uid, post.id).then(load);
+                }}
+                style={styles.removeBtn}>
+                <Ionicons name="bookmark" size={18} color={theme.tint} />
+              </Pressable>
+            </View>
+          ))}
+        </View>
       ) : null}
 
       {showVendors && vendorsInView.length > 0 ? (
