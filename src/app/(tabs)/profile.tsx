@@ -1,4 +1,4 @@
-import { createElement, useEffect, useState } from 'react';
+import { createElement, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -71,11 +71,18 @@ export default function ProfileScreen() {
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const redirectToDiscoverAfterAuth = useRef(false);
 
   useEffect(() => {
     if (authParam === 'login') setAuthScreen('login');
     else if (authParam === 'signup') setAuthScreen('signup');
   }, [authParam]);
+
+  useEffect(() => {
+    if (!user || loading || !redirectToDiscoverAfterAuth.current) return;
+    redirectToDiscoverAfterAuth.current = false;
+    router.replace('/discover' as never);
+  }, [user, loading, router]);
 
   useEffect(() => {
     setError(null);
@@ -89,6 +96,11 @@ export default function ProfileScreen() {
     setAccountType(null);
     setPendingSignupRole(null);
     setError(null);
+  };
+
+  const landOnDiscover = () => {
+    redirectToDiscoverAfterAuth.current = true;
+    router.replace('/discover' as never);
   };
 
   const onEmailSubmit = async () => {
@@ -110,6 +122,7 @@ export default function ProfileScreen() {
       } else {
         await login(email, password);
       }
+      landOnDiscover();
     } catch (err) {
       setError(getAuthErrorMessage(err));
     } finally {
@@ -131,16 +144,19 @@ export default function ProfileScreen() {
         } else {
           await loginWithGoogle();
         }
+        landOnDiscover();
       } else if (nativeGoogle.missingClientId) {
         setError(
           'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to .env.local (from Firebase → Authentication → Google). Or test Google in the browser with npm run web.',
         );
       } else {
         setPendingSignupRole(authScreen === 'signup' ? accountType : null);
+        redirectToDiscoverAfterAuth.current = true;
         await nativeGoogle.promptAsync();
       }
     } catch (err) {
       setError(getAuthErrorMessage(err));
+      redirectToDiscoverAfterAuth.current = false;
     } finally {
       setSubmitting(false);
     }
@@ -170,6 +186,7 @@ export default function ProfileScreen() {
     setSubmitting(true);
     try {
       await confirmPhoneLogin(confirmation, smsCode);
+      landOnDiscover();
     } catch (err) {
       setError(getAuthErrorMessage(err));
     } finally {

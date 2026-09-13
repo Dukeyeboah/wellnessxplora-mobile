@@ -16,9 +16,15 @@ import {
 type Props = {
   vendorId: string;
   size?: 'sm' | 'default';
+  /** When true, hide the control once the viewer is already connected. */
+  hideWhenConnected?: boolean;
 };
 
-export function VendorFollowButton({ vendorId, size = 'sm' }: Props) {
+export function VendorFollowButton({
+  vendorId,
+  size = 'sm',
+  hideWhenConnected = false,
+}: Props) {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useAuth();
@@ -67,6 +73,8 @@ export function VendorFollowButton({ vendorId, size = 'sm' }: Props) {
     }
   };
 
+  if (hideWhenConnected && loaded && following) return null;
+
   const compact = size === 'sm';
 
   return (
@@ -76,7 +84,7 @@ export function VendorFollowButton({ vendorId, size = 'sm' }: Props) {
         void toggle();
       }}
       disabled={busy || !loaded}
-      accessibilityLabel={following ? 'Unfollow' : 'Follow'}
+      accessibilityLabel={following ? 'Disconnect' : 'Connect'}
       style={[
         styles.btn,
         {
@@ -100,7 +108,7 @@ export function VendorFollowButton({ vendorId, size = 'sm' }: Props) {
           <ThemedText
             type="smallBold"
             style={{ color: following ? theme.text : '#FFFFFF', fontSize: 12, letterSpacing: 0.1 }}>
-            {following ? 'Following' : 'Follow'}
+            {following ? 'Connected' : 'Connect'}
           </ThemedText>
         </>
       )}

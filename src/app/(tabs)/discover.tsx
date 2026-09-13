@@ -26,7 +26,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { fetchIsAdmin } from '@/lib/admin-auth';
 import { useAuth } from '@/lib/auth-context';
 import { useChrome, useScrollChrome } from '@/lib/chrome';
-import { categorizeFeedPosts } from '@/lib/feed-post-layout';
+import { categorizeFeedPosts, shufflePosts } from '@/lib/feed-post-layout';
 import {
   FEED_INDEX_ERROR_MESSAGE,
   FEED_PERMISSION_ERROR_MESSAGE,
@@ -115,7 +115,7 @@ export default function DiscoverScreen() {
     setError(null);
     try {
       const page = await fetchFeedPage({ mode: 'for-you' });
-      setPosts(page.posts);
+      setPosts(shufflePosts(page.posts));
       setCursor(page.lastDoc);
       setHasMore(page.hasMore);
     } catch (err) {
@@ -158,7 +158,8 @@ export default function DiscoverScreen() {
       const page = await fetchFeedPage({ mode: 'for-you', cursor });
       setPosts((prev) => {
         const seen = new Set(prev.map((p) => p.id));
-        return [...prev, ...page.posts.filter((p) => !seen.has(p.id))];
+        const incoming = shufflePosts(page.posts.filter((p) => !seen.has(p.id)));
+        return [...prev, ...incoming];
       });
       setCursor(page.lastDoc);
       setHasMore(page.hasMore);
@@ -185,89 +186,92 @@ export default function DiscoverScreen() {
   return (
     <ThemedView style={styles.screen}>
       <AppHeader title="WellnessXplora" collapsible showAuthWhenSignedOut />
-      <FlatList
-        data={listData}
-        keyExtractor={(item) => item.id}
-        {...scrollChrome}
-        contentContainerStyle={[
-          styles.list,
-          {
-            paddingBottom: insets.bottom + BottomTabInset + Spacing.four,
-            paddingTop: Spacing.two,
-          },
-        ]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        onEndReached={() => void onLoadMore()}
-        onEndReachedThreshold={0.4}
-        ListHeaderComponent={
-          <View style={styles.headerBlock}>
-            <StoriesRail
-              canCreate={canCreate}
-              createAuthorId={user?.uid}
-              createAuthorType={createAuthorType as StoryAuthorType}
-              createAuthorName={createAuthorName}
-              createAuthorPhotoURL={createAuthorPhoto}
-              createVendorId={isVendor ? user?.uid : undefined}
-            />
+      <View style={styles.body}>
+        <FlatList
+          data={listData}
+          keyExtractor={(item) => item.id}
+          {...scrollChrome}
+          contentContainerStyle={[
+            styles.list,
+            {
+              paddingBottom: insets.bottom + BottomTabInset + Spacing.four,
+              paddingTop: Spacing.two,
+            },
+          ]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          onEndReached={() => void onLoadMore()}
+          onEndReachedThreshold={0.4}
+          ListHeaderComponent={
+            <View style={styles.headerBlock}>
+              <StoriesRail
+                canCreate={canCreate}
+                createAuthorId={user?.uid}
+                createAuthorType={createAuthorType as StoryAuthorType}
+                createAuthorName={createAuthorName}
+                createAuthorPhotoURL={createAuthorPhoto}
+                createVendorId={isVendor ? user?.uid : undefined}
+              />
 
-            <View style={styles.filterRow}>
-              <FeedContentTypeFilter value={contentFilter} onChange={setContentFilter} />
+              {contentFilter === 'events' && !loading && !error && events.length > 0 ? (
+                <FeedEventsCarousel posts={events} />
+              ) : null}
             </View>
-
-            {contentFilter === 'events' && !loading && !error && events.length > 0 ? (
-              <FeedEventsCarousel posts={events} />
-            ) : null}
-          </View>
-        }
-        ListEmptyComponent={
-          loading || authLoading ? (
-            <View style={styles.centered}>
-              <ActivityIndicator color={theme.tint} />
-            </View>
-          ) : error ? (
-            <View style={styles.centered}>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-                {error}
-              </ThemedText>
-              <Pressable onPress={() => void loadInitial()} style={{ marginTop: Spacing.two }}>
+          }
+          ListEmptyComponent={
+            loading || authLoading ? (
+              <View style={styles.centered}>
+                <ActivityIndicator color={theme.tint} />
+              </View>
+            ) : error ? (
+              <View style={styles.centered}>
+                <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+                  {error}
+                </ThemedText>
+                <Pressable onPress={() => void loadInitial()} style={{ marginTop: Spacing.two }}>
+                  <ThemedText type="smallBold" style={{ color: theme.tint }}>
+                    Try again
+                  </ThemedText>
+                </Pressable>
+              </View>
+            ) : contentFilter === 'events' && events.length > 0 ? null : (
+              <View style={styles.centered}>
+                <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+                  {emptyMessage}
+                </ThemedText>
+              </View>
+            )
+          }
+          ListFooterComponent={
+            contentFilter === 'events' ? null : loadingMore ? (
+              <View style={styles.footer}>
+                <ActivityIndicator color={theme.tint} />
+              </View>
+            ) : hasMore && visiblePosts.length > 0 ? (
+              <Pressable onPress={() => void onLoadMore()} style={styles.loadMore}>
                 <ThemedText type="smallBold" style={{ color: theme.tint }}>
-                  Try again
+                  Load more
                 </ThemedText>
               </Pressable>
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <View style={styles.cardWrap}>
+              <FeedPostCard post={item} />
             </View>
-          ) : contentFilter === 'events' && events.length > 0 ? null : (
-            <View style={styles.centered}>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-                {emptyMessage}
-              </ThemedText>
-            </View>
-          )
-        }
-        ListFooterComponent={
-          contentFilter === 'events' ? null : loadingMore ? (
-            <View style={styles.footer}>
-              <ActivityIndicator color={theme.tint} />
-            </View>
-          ) : hasMore && visiblePosts.length > 0 ? (
-            <Pressable onPress={() => void onLoadMore()} style={styles.loadMore}>
-              <ThemedText type="smallBold" style={{ color: theme.tint }}>
-                Load more
-              </ThemedText>
-            </Pressable>
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <View style={styles.cardWrap}>
-            <FeedPostCard post={item} />
-          </View>
-        )}
-      />
+          )}
+        />
+
+        <View pointerEvents="box-none" style={styles.filterDock}>
+          <FeedContentTypeFilter value={contentFilter} onChange={setContentFilter} />
+        </View>
+      </View>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  body: { flex: 1 },
   list: {
     width: '100%',
     maxWidth: MaxContentWidth,
@@ -276,14 +280,16 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   headerBlock: {
-    gap: Spacing.two,
-    marginBottom: Spacing.two,
+    gap: Spacing.one,
+    marginBottom: Spacing.one,
   },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
+  filterDock: {
+    position: 'absolute',
+    right: Spacing.two,
+    // Vertically center the filter rail on the screen (slightly above true mid).
+    top: '38%',
+    zIndex: 40,
+    elevation: 40,
   },
   cardWrap: { width: '100%' },
   centered: {

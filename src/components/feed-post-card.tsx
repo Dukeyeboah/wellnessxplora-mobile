@@ -431,8 +431,11 @@ export function FeedPostCard({ post, vendorVerified, disableOpen }: Props) {
 
   const isOwnPost =
     Boolean(user) && (post.authorId === user?.uid || post.vendorId === user?.uid);
-  const showFollow =
-    !isOwnPost && post.authorType === 'vendor' && Boolean(post.vendorId);
+  const profileVendorId =
+    post.authorType === 'vendor'
+      ? post.vendorId?.trim() || post.authorId.trim() || undefined
+      : undefined;
+  const showConnect = !isOwnPost && Boolean(profileVendorId);
 
   const metaParts: string[] = [];
   if (post.contentType === 'event') metaParts.push('Event');
@@ -445,8 +448,8 @@ export function FeedPostCard({ post, vendorVerified, disableOpen }: Props) {
   };
 
   const openAuthor = () => {
-    if (post.authorType === 'vendor' && post.vendorId) {
-      router.push(`/vendor/${post.vendorId}` as never);
+    if (profileVendorId) {
+      router.push(`/vendor/${profileVendorId}` as never);
     }
   };
 
@@ -470,7 +473,7 @@ export function FeedPostCard({ post, vendorVerified, disableOpen }: Props) {
             openAuthor();
           }}
           style={styles.authorRow}
-          disabled={post.authorType !== 'vendor'}>
+          disabled={!profileVendorId}>
           {post.authorType === 'wellnessxplora' ? (
             <Image source={WX_LOGO} style={styles.avatar} contentFit="cover" />
           ) : authorPhoto ? (
@@ -494,7 +497,9 @@ export function FeedPostCard({ post, vendorVerified, disableOpen }: Props) {
             </ThemedText>
           </View>
         </Pressable>
-        {showFollow && post.vendorId ? <VendorFollowButton vendorId={post.vendorId} /> : null}
+        {showConnect && profileVendorId ? (
+          <VendorFollowButton vendorId={profileVendorId} hideWhenConnected />
+        ) : null}
       </View>
 
       {post.media.length > 0 ? (
@@ -509,7 +514,7 @@ export function FeedPostCard({ post, vendorVerified, disableOpen }: Props) {
             likeCount={likeCount}
             saveCount={saveCount}
             layout="under-media"
-            addToStoryPost={isOwnPost ? post : undefined}
+            addToStoryPost={post}
             addToStoryMediaIndex={mediaIndex}
             onCountsChange={({ likeCount: l, saveCount: s }) => {
               setLikeCount(l);
@@ -528,7 +533,7 @@ export function FeedPostCard({ post, vendorVerified, disableOpen }: Props) {
             likeCount={likeCount}
             saveCount={saveCount}
             layout="inline"
-            addToStoryPost={isOwnPost ? post : undefined}
+            addToStoryPost={post}
             addToStoryMediaIndex={mediaIndex}
             onCountsChange={({ likeCount: l, saveCount: s }) => {
               setLikeCount(l);

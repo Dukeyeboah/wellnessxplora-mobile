@@ -188,7 +188,7 @@ export function groupStoriesByAuthor(stories: FeedStory[]): StoryAuthorGroup[] {
 }
 
 export const STORY_PERMISSION_ERROR_MESSAGE =
-  'Stories cannot load yet — Firestore story rules may not be deployed for this project. Deploy rules from the web repo (stories collection), then refresh.';
+  'Stories are temporarily unavailable. Public story reads need an updated Firestore rules deploy from the web repo.';
 
 export const STORY_INDEX_ERROR_MESSAGE =
   'Stories are almost ready — a database index is still building. Try again in a few minutes.';
@@ -212,12 +212,14 @@ function isIndexError(error: unknown): boolean {
 }
 
 /**
- * Fetch live stories. Public query uses status + expiresAt (needs composite index).
- * Also tries visibility == public when needed for rules alignment.
- * Admins get an extra recent-stories pass so editorial rings still appear if the
- * public index/query is flaky. Guests only see live public stories.
+ * Fetch live stories for everyone (including guests).
  *
- * Returns `{ stories, error }` so the rail can surface rules/index problems.
+ * Tries both public query shapes:
+ * 1) status + visibility + expiresAt — matches older rules that required visibility
+ * 2) status + expiresAt — matches current rules + the standard composite index
+ *
+ * Admins get an extra recent-stories pass. Own-author reads fill gaps for creators.
+ * Returns `{ stories, error }` only when every public query failed.
  */
 export async function fetchActiveStories(
   pageSize = 80,
@@ -225,6 +227,7 @@ export async function fetchActiveStories(
 ): Promise<{ stories: FeedStory[]; error?: string }> {
   const nowDate = new Date();
   const byId = new Map<string, FeedStory>();
+  let publicQueryOk = false;
   let lastError: string | undefined;
 
   const ingest = (docs: QueryDocumentSnapshot[]) => {
@@ -254,23 +257,22 @@ export async function fetchActiveStories(
     ingest(snap.docs);
   };
 
-  try {
-    await tryPublic(true);
-  } catch (err) {
-    console.warn('[stories] public+visibility query failed', err);
-    if (isPermissionError(err)) lastError = STORY_PERMISSION_ERROR_MESSAGE;
-    else if (isIndexError(err)) lastError = STORY_INDEX_ERROR_MESSAGE;
-    else lastError = err instanceof Error ? err.message : 'Could not load stories.';
-
+  // Older production rules required visibility on list; try that first, then the
+  // simpler status+expiresAt query used by current rules / indexes.
+  for (const withVisibility of [true, false] as const) {
     try {
-      await tryPublic(false);
-      if (byId.size > 0) lastError = undefined;
-    } catch (err2) {
-      console.warn('[stories] public active query failed (index/rules?)', err2);
-      if (!lastError) {
-        if (isPermissionError(err2)) lastError = STORY_PERMISSION_ERROR_MESSAGE;
-        else if (isIndexError(err2)) lastError = STORY_INDEX_ERROR_MESSAGE;
-      }
+      await tryPublic(withVisibility);
+      publicQueryOk = true;
+      lastError = undefined;
+      break;
+    } catch (err) {
+      console.warn(
+        `[stories] public query failed (visibility=${withVisibility})`,
+        err,
+      );
+      if (isPermissionError(err)) lastError = STORY_PERMISSION_ERROR_MESSAGE;
+      else if (isIndexError(err)) lastError = STORY_INDEX_ERROR_MESSAGE;
+      else lastError = err instanceof Error ? err.message : 'Could not load stories.';
     }
   }
 
@@ -281,7 +283,6 @@ export async function fetchActiveStories(
         query(collection(db, 'stories'), where('authorId', '==', viewerId), limit(40)),
       );
       ingest(ownSnap.docs);
-      if (byId.size > 0) lastError = undefined;
     } catch (err) {
       console.warn('[stories] own stories query failed', err);
     }
@@ -294,7 +295,6 @@ export async function fetchActiveStories(
         query(collection(db, 'stories'), orderBy('createdAt', 'desc'), limit(60)),
       );
       ingest(adminSnap.docs);
-      if (byId.size > 0) lastError = undefined;
     } catch (err) {
       console.warn('[stories] admin stories query failed', err);
     }
@@ -302,7 +302,8 @@ export async function fetchActiveStories(
 
   return {
     stories: [...byId.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
-    error: byId.size === 0 ? lastError : undefined,
+    // Only surface infra errors when public list truly failed (not empty rail).
+    error: publicQueryOk ? undefined : lastError,
   };
 }
 
@@ -388,14 +389,31 @@ export async function deleteStoryDoc(storyId: string): Promise<void> {
  * Reuses the post’s Storage media paths (no re-upload).
  * Cleanup of story docs must never delete objects under `posts/` — those belong
  * to the permanent post.
+ *
+ * Pass `publisher` to share any post onto the current creator’s Story rail
+ * (vendor / WellnessXplora editor). Defaults to the post’s own author when omitted.
  */
 export async function createStoryFromPost(input: {
   post: FeedPostLike;
   mediaIndex?: number;
+  publisher?: {
+    authorId: string;
+    authorType: StoryAuthorType;
+    authorName: string;
+    authorPhotoURL?: string;
+    vendorId?: string;
+  };
 }): Promise<string> {
-  const { post } = input;
+  const { post, publisher } = input;
   const authorType: StoryAuthorType =
-    post.authorType === 'wellnessxplora' ? 'wellnessxplora' : 'vendor';
+    publisher?.authorType ??
+    (post.authorType === 'wellnessxplora' ? 'wellnessxplora' : 'vendor');
+  const authorId = publisher?.authorId ?? post.authorId;
+  const authorName = publisher?.authorName ?? post.authorName;
+  const authorPhotoURL = publisher?.authorPhotoURL ?? post.authorPhotoURL;
+  const vendorId =
+    publisher?.vendorId ??
+    (authorType === 'vendor' ? post.vendorId || post.authorId : undefined);
 
   const contentType: PostContentType = post.contentType === 'event' ? 'event' : 'post';
 
@@ -418,16 +436,16 @@ export async function createStoryFromPost(input: {
   }
 
   return createStory({
-    authorId: post.authorId,
+    authorId,
     authorType,
-    authorName: post.authorName,
-    authorPhotoURL: post.authorPhotoURL,
-    vendorId: authorType === 'vendor' ? post.vendorId || post.authorId : undefined,
+    authorName,
+    authorPhotoURL,
+    vendorId: authorType === 'vendor' ? vendorId || authorId : undefined,
     caption,
     media,
     linkedEntities:
-      authorType === 'vendor' && (post.vendorId || post.authorId)
-        ? [{ type: 'vendor', id: post.vendorId || post.authorId }]
+      authorType === 'vendor' && (vendorId || authorId)
+        ? [{ type: 'vendor', id: vendorId || authorId }]
         : [],
     sourcePostId: post.id,
     sourcePostContentType: contentType,

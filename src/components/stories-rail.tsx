@@ -233,21 +233,21 @@ export function StoriesRail({
 const styles = StyleSheet.create({
   wrap: {
     width: '100%',
-    minHeight: 92,
+    minHeight: 84,
   },
   scroll: {
     flexGrow: 0,
   },
   row: {
     gap: 14,
-    paddingVertical: 4,
+    paddingVertical: 2,
     paddingRight: 8,
     alignItems: 'flex-start',
   },
   item: {
     width: 72,
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   addWrap: {
     width: AVATAR + 4,

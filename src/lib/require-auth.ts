@@ -19,7 +19,7 @@ const MESSAGES: Record<RequireAuthAction, string> = {
   like_post: 'To like posts, please log in or sign up.',
   save_post: 'To save posts for later, please log in or sign up.',
   share_post: 'To share posts, please log in or sign up.',
-  follow: 'To follow vendors, please log in or sign up.',
+  follow: 'To connect with vendors, please log in or sign up.',
 };
 
 type SignInModalHandler = (message: string) => void;

@@ -21,6 +21,7 @@ import { ListingRatingSummary } from '@/components/listing-rating-summary';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { VendorFollowButton } from '@/components/vendor-follow-button';
 import { VendorTrustBadges } from '@/components/vendor-trust-badges';
 import { BottomTabInset, Fonts, Shadows, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -218,6 +219,7 @@ export default function VendorDetailScreen() {
   }
 
   const bio = vendor.description.trim();
+  const isOwnVendor = Boolean(user && user.uid === vendor.id);
 
   return (
     <ThemedView style={styles.screen}>
@@ -262,6 +264,11 @@ export default function VendorDetailScreen() {
                 reviewCount={vendor.reviewCount}
                 size={12}
               />
+              {!isOwnVendor ? (
+                <View style={styles.connectWrap}>
+                  <VendorFollowButton vendorId={vendor.id} size="default" />
+                </View>
+              ) : null}
               {backCategory ? (
                 <Pressable
                   onPress={() => router.push(`/category/${backCategory.slug}`)}
@@ -566,6 +573,10 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
     paddingTop: 2,
+  },
+  connectWrap: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
   },
   vendorName: {
     fontFamily: Fonts.serif,
