@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -354,6 +355,80 @@ export async function updatePost(
   }
 
   await updateDoc(ref, data as UpdateData<DocumentData>);
+}
+
+export async function deletePost(postId: string): Promise<void> {
+  await deleteDoc(doc(db, 'posts', postId));
+}
+
+/** Owner dashboard: all posts for this vendor account (any status). */
+export async function fetchVendorPosts(vendorId: string): Promise<FeedPost[]> {
+  const byId = new Map<string, FeedPost>();
+  const ingest = (docs: QueryDocumentSnapshot[]) => {
+    for (const d of docs) byId.set(d.id, mapPostDoc(d));
+  };
+
+  // Prefer equality-only queries (no composite index) so the dashboard
+  // still loads when status/visibility indexes aren't deployed yet.
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'posts'), where('vendorId', '==', vendorId), limit(50)),
+    );
+    ingest(snap.docs);
+  } catch (err) {
+    console.warn('[posts] vendorId owner query failed', err);
+  }
+
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'posts'), where('authorId', '==', vendorId), limit(50)),
+    );
+    ingest(snap.docs);
+  } catch (err) {
+    console.warn('[posts] authorId owner query failed', err);
+  }
+
+  return [...byId.values()].sort((a, b) => {
+    const aTime = a.updatedAt.getTime() || a.createdAt.getTime();
+    const bTime = b.updatedAt.getTime() || b.createdAt.getTime();
+    return bTime - aTime;
+  });
+}
+
+/** Public profile: published posts only. */
+export async function fetchPublishedVendorPosts(vendorId: string): Promise<FeedPost[]> {
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, 'posts'),
+        where('vendorId', '==', vendorId),
+        where('status', '==', 'published'),
+        where('visibility', '==', 'public'),
+        orderBy('publishedAt', 'desc'),
+        limit(40),
+      ),
+    );
+    return snap.docs.map((d) => mapPostDoc(d));
+  } catch (err) {
+    console.warn('[posts] published-by-vendor query failed, trying authorId fallback', err);
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, 'posts'),
+          where('authorId', '==', vendorId),
+          where('authorType', '==', 'vendor'),
+          where('status', '==', 'published'),
+          orderBy('publishedAt', 'desc'),
+          limit(40),
+        ),
+      );
+      return snap.docs.map((d) => mapPostDoc(d));
+    } catch (err2) {
+      console.warn('[posts] published authorId query failed', err2);
+      const all = await fetchVendorPosts(vendorId).catch(() => [] as FeedPost[]);
+      return all.filter((p) => p.status === 'published');
+    }
+  }
 }
 
 export function isFeedPermissionError(error: unknown): boolean {

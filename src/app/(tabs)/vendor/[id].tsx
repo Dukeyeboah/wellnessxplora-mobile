@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ExploreListingCard } from '@/components/explore-listing-card';
+import { FeedPostCard } from '@/components/feed-post-card';
 import { ListingRatingSummary } from '@/components/listing-rating-summary';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
@@ -31,6 +32,7 @@ import {
   categorySlugFromLabel,
   getCategoryBySlug,
 } from '@/lib/explore-categories';
+import { fetchPublishedVendorPosts, type FeedPost } from '@/lib/feed-posts';
 import {
   fetchListingsByVendorId,
   fetchVendorById,
@@ -48,12 +50,13 @@ import {
 } from '@/lib/vendor-reviews';
 
 type VendorPanel = 'bio' | 'share' | 'review';
+type ProfileContentTab = 'products' | 'posts';
 
 const BIO = '#0284C7';
 const SHARE = '#7C3AED';
 const REVIEW = '#D97706';
 const WHATSAPP = '#25D366';
-const HEART_BG = '#FDECEC';
+const BOOKMARK_BG = '#FFF7ED';
 
 export default function VendorDetailScreen() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
@@ -67,7 +70,10 @@ export default function VendorDetailScreen() {
 
   const [vendor, setVendor] = useState<ExploreVendorDetail | null>(null);
   const [listings, setListings] = useState<ExploreListing[]>([]);
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [contentTab, setContentTab] = useState<ProfileContentTab>('products');
   const [loading, setLoading] = useState(true);
+  const [postsLoading, setPostsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState<VendorPanel | null>(null);
   const [bioExpanded, setBioExpanded] = useState(false);
@@ -131,6 +137,25 @@ export default function VendorDetailScreen() {
       cancelled = true;
     };
   }, [id, user]);
+
+  useEffect(() => {
+    if (!id || contentTab !== 'posts') return;
+    let cancelled = false;
+    setPostsLoading(true);
+    void fetchPublishedVendorPosts(id)
+      .then((rows) => {
+        if (!cancelled) setPosts(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setPosts([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPostsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, contentTab]);
 
   const backCategory = useMemo(() => {
     const fromSlug = typeof from === 'string' ? from : '';
@@ -264,11 +289,6 @@ export default function VendorDetailScreen() {
                 reviewCount={vendor.reviewCount}
                 size={12}
               />
-              {!isOwnVendor ? (
-                <View style={styles.connectWrap}>
-                  <VendorFollowButton vendorId={vendor.id} size="default" />
-                </View>
-              ) : null}
               {backCategory ? (
                 <Pressable
                   onPress={() => router.push(`/category/${backCategory.slug}`)}
@@ -304,13 +324,15 @@ export default function VendorDetailScreen() {
                     if (typeof next === 'boolean') setFavorited(next);
                   });
                 }}
-                style={[styles.heartFab, Shadows.button, { backgroundColor: HEART_BG }]}>
+                accessibilityLabel={favorited ? 'Remove from saved' : 'Save vendor'}
+                style={[styles.actionFab, Shadows.button, { backgroundColor: BOOKMARK_BG }]}>
                 <Ionicons
-                  name={favorited ? 'heart' : 'heart-outline'}
+                  name={favorited ? 'bookmark' : 'bookmark-outline'}
                   size={18}
-                  color={favorited ? '#E11D48' : theme.text}
+                  color={favorited ? '#EA580C' : theme.text}
                 />
               </Pressable>
+              {!isOwnVendor ? <VendorFollowButton vendorId={vendor.id} variant="icon" /> : null}
               {vendor.whatsapp ? (
                 <Pressable
                   onPress={() => void openWhatsApp()}
@@ -473,7 +495,7 @@ export default function VendorDetailScreen() {
                   onPress={() => void saveRating()}
                   style={[
                     styles.saveRating,
-                    { opacity: posting || myRating < 1 ? 0.45 : 1, backgroundColor: HEART_BG },
+                    { opacity: posting || myRating < 1 ? 0.45 : 1, backgroundColor: BOOKMARK_BG },
                   ]}>
                   {posting ? (
                     <ActivityIndicator />
@@ -498,18 +520,70 @@ export default function VendorDetailScreen() {
         </View>
 
         <View style={styles.body}>
-          <ThemedText style={styles.productsTitle}>Products</ThemedText>
+          <View style={styles.contentTabs}>
+            {(
+              [
+                ['products', 'Products', 'bag-handle-outline'],
+                ['posts', 'Posts', 'newspaper-outline'],
+              ] as const
+            ).map(([tabId, label, icon]) => {
+              const active = contentTab === tabId;
+              return (
+                <Pressable
+                  key={tabId}
+                  onPress={() => setContentTab(tabId)}
+                  style={[
+                    styles.contentTab,
+                    Shadows.button,
+                    {
+                      backgroundColor: active ? theme.backgroundSelected : theme.backgroundElement,
+                      borderColor: active ? theme.tint : theme.backgroundSelected,
+                    },
+                  ]}>
+                  <Ionicons name={icon} size={14} color={active ? theme.tint : theme.textSecondary} />
+                  <ThemedText
+                    type="smallBold"
+                    style={{ color: active ? theme.tint : theme.textSecondary, fontSize: 13 }}>
+                    {label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
 
-          {listings.length === 0 ? (
+          {contentTab === 'products' ? (
+            <>
+              {listings.length === 0 ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  No active products yet.
+                </ThemedText>
+              ) : (
+                <View style={styles.productGrid}>
+                  {listings.map((item) => (
+                    <View key={item.id} style={{ width: gridWidth }}>
+                      <ExploreListingCard
+                        listing={item}
+                        grid
+                        hideVendor
+                        showDescription
+                        overlayActions
+                        fromVendor={vendor.id}
+                      />
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          ) : postsLoading ? (
+            <ActivityIndicator color={theme.tint} style={{ marginTop: Spacing.three }} />
+          ) : posts.length === 0 ? (
             <ThemedText type="small" themeColor="textSecondary">
-              No active products yet.
+              No posts yet.
             </ThemedText>
           ) : (
-            <View style={styles.productGrid}>
-              {listings.map((item) => (
-                <View key={item.id} style={{ width: gridWidth }}>
-                  <ExploreListingCard listing={item} grid hideVendor showDescription overlayActions fromVendor={vendor.id} />
-                </View>
+            <View style={styles.postsList}>
+              {posts.map((post) => (
+                <FeedPostCard key={post.id} post={post} vendorVerified={vendor.verified} />
               ))}
             </View>
           )}
@@ -574,10 +648,6 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingTop: 2,
   },
-  connectWrap: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
   vendorName: {
     fontFamily: Fonts.serif,
     fontSize: 20,
@@ -607,7 +677,7 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     paddingTop: 4,
   },
-  heartFab: {
+  actionFab: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -699,9 +769,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: Spacing.two,
   },
+  contentTabs: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  contentTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingVertical: 10,
+  },
   productGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: Spacing.three,
+    marginTop: Spacing.two,
+  },
+  postsList: {
     gap: Spacing.three,
     marginTop: Spacing.two,
   },

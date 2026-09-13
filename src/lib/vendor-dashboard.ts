@@ -110,6 +110,21 @@ export async function createVendorListing(
   return ref.id;
 }
 
+export async function updateVendorListingImages(
+  listingId: string,
+  vendorId: string,
+  imagePaths: string[],
+): Promise<void> {
+  const snap = await getDoc(doc(db, 'listings', listingId));
+  if (!snap.exists() || snap.data()?.vendorId !== vendorId) {
+    throw new Error('Listing not found.');
+  }
+  await updateDoc(doc(db, 'listings', listingId), {
+    images: imagePaths,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function updateVendorListing(
   listingId: string,
   vendorId: string,

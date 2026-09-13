@@ -38,12 +38,24 @@ export function storyMediaPath(storyId: string, index: number) {
   return `stories/${storyId}/${index}`;
 }
 
+export function listingMediaPath(listingId: string, index = 0) {
+  return `listings/${listingId}/${index}`;
+}
+
 export async function uploadPostImageFromUri(
   postId: string,
   uri: string,
   index = 0,
 ): Promise<string> {
   return uploadImageFromUri(postMediaPath(postId, index), uri);
+}
+
+export async function uploadListingImageFromUri(
+  listingId: string,
+  uri: string,
+  index = 0,
+): Promise<string> {
+  return uploadImageFromUri(listingMediaPath(listingId, index), uri);
 }
 
 export async function uploadStoryImageFromUri(

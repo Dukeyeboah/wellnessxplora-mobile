@@ -5,35 +5,35 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ExploreListingCard } from '@/components/explore-listing-card';
+import { ListingEditorSheet } from '@/components/listing-editor-sheet';
 import { ListingRatingSummary } from '@/components/listing-rating-summary';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { VendorPostsManager } from '@/components/vendor-posts-manager';
 import { VendorTrustBadges } from '@/components/vendor-trust-badges';
 import { BottomTabInset, Fonts, Shadows, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { useChrome, useScrollChrome } from '@/lib/chrome';
 import { getCategoryBySlug } from '@/lib/explore-categories';
-import { fetchListingsByVendorId, fetchVendorById, type ExploreListing } from '@/lib/listings';
+import { fetchVendorById, type ExploreListing } from '@/lib/listings';
 import {
-  createEmptyListingDraft,
-  createVendorListing,
   deleteVendorListing,
   fetchVendorListings,
   type DashboardListing,
 } from '@/lib/vendor-dashboard';
 import { fetchVendorProfileDoc } from '@/lib/user-profile';
+
+type DashboardSection = 'products' | 'posts';
 
 function dashboardListingToExplore(listing: DashboardListing, vendorName: string): ExploreListing {
   return {
@@ -75,9 +75,9 @@ export default function DashboardScreen() {
   const [rating, setRating] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
   const [listings, setListings] = useState<DashboardListing[]>([]);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [newListingTitle, setNewListingTitle] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [section, setSection] = useState<DashboardSection>('products');
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingListing, setEditingListing] = useState<DashboardListing | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -137,29 +137,20 @@ export default function DashboardScreen() {
   const gridWidth = (windowWidth - Spacing.three * 3) / 2;
 
   const onAddListing = () => {
-    setNewListingTitle('');
-    setCreateOpen(true);
-  };
-
-  const confirmCreateListing = async () => {
-    if (!user || !newListingTitle.trim()) return;
-    setCreating(true);
-    try {
-      const draft = createEmptyListingDraft();
-      draft.title = newListingTitle.trim();
-      await createVendorListing(user.uid, draft);
-      setCreateOpen(false);
-      await load();
-    } catch (err) {
-      Alert.alert('Could not create listing', err instanceof Error ? err.message : 'Try again.');
-    } finally {
-      setCreating(false);
-    }
+    setEditingListing(null);
+    setEditorOpen(true);
   };
 
   const onEditListing = (listing: DashboardListing) => {
     Alert.alert(listing.title, undefined, [
       { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Edit',
+        onPress: () => {
+          setEditingListing(listing);
+          setEditorOpen(true);
+        },
+      },
       {
         text: 'Delete',
         style: 'destructive',
@@ -264,91 +255,104 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.body}>
-          <View style={styles.productsHeader}>
-            <ThemedText style={styles.productsTitle}>Your listings</ThemedText>
-            <Pressable
-              onPress={onAddListing}
-              style={[styles.addBtn, { backgroundColor: theme.tint }]}>
-              <Ionicons name="add" size={16} color="#FFFFFF" />
-              <ThemedText type="smallBold" style={styles.addBtnLabel}>
-                Add
-              </ThemedText>
-            </Pressable>
+          <View style={styles.sectionTabs}>
+            {(
+              [
+                ['products', 'Products', 'bag-handle-outline'],
+                ['posts', 'Posts', 'newspaper-outline'],
+              ] as const
+            ).map(([id, label, icon]) => {
+              const active = section === id;
+              return (
+                <Pressable
+                  key={id}
+                  onPress={() => setSection(id)}
+                  style={[
+                    styles.sectionTab,
+                    Shadows.button,
+                    {
+                      backgroundColor: active ? theme.backgroundSelected : theme.backgroundElement,
+                      borderColor: active ? theme.tint : theme.backgroundSelected,
+                    },
+                  ]}>
+                  <Ionicons name={icon} size={14} color={active ? theme.tint : theme.textSecondary} />
+                  <ThemedText
+                    type="smallBold"
+                    style={{ color: active ? theme.tint : theme.textSecondary, fontSize: 13 }}>
+                    {label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
           </View>
 
-          {listings.length === 0 ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              No listings yet. Tap Add to create your first product.
-            </ThemedText>
-          ) : (
-            <View style={styles.productGrid}>
-              {listings.map((item) => (
-                <View key={item.id} style={{ width: gridWidth }}>
-                  <ExploreListingCard
-                    listing={{
-                      ...dashboardListingToExplore(item, businessName),
-                      vendorId: user.uid,
-                    }}
-                    grid
-                    hideVendor
-                    showDescription
-                    overlayActions
-                    fromVendor={user.uid}
-                  />
-                  <Pressable
-                    onPress={() => onEditListing(item)}
-                    style={[styles.editFab, Shadows.button, { backgroundColor: theme.backgroundElement }]}>
-                    <Ionicons name="pencil" size={12} color={theme.text} />
-                  </Pressable>
+          {section === 'products' ? (
+            <>
+              <View style={styles.productsHeader}>
+                <ThemedText style={styles.productsTitle}>Your products</ThemedText>
+                <Pressable
+                  onPress={onAddListing}
+                  style={[styles.addBtn, { backgroundColor: theme.tint }]}>
+                  <Ionicons name="add" size={16} color="#FFFFFF" />
+                  <ThemedText type="smallBold" style={styles.addBtnLabel}>
+                    Add
+                  </ThemedText>
+                </Pressable>
+              </View>
+
+              {listings.length === 0 ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  No products yet. Tap Add to create your first product.
+                </ThemedText>
+              ) : (
+                <View style={styles.productGrid}>
+                  {listings.map((item) => (
+                    <View key={item.id} style={{ width: gridWidth }}>
+                      <ExploreListingCard
+                        listing={{
+                          ...dashboardListingToExplore(item, businessName),
+                          vendorId: user.uid,
+                        }}
+                        grid
+                        hideVendor
+                        showDescription
+                        overlayActions
+                        fromVendor={user.uid}
+                      />
+                      <Pressable
+                        onPress={() => onEditListing(item)}
+                        style={[
+                          styles.editFab,
+                          Shadows.button,
+                          { backgroundColor: theme.backgroundElement },
+                        ]}>
+                        <Ionicons name="pencil" size={12} color={theme.text} />
+                      </Pressable>
+                    </View>
+                  ))}
                 </View>
-              ))}
-            </View>
+              )}
+            </>
+          ) : (
+            <VendorPostsManager
+              vendorId={user.uid}
+              vendorName={businessName || 'Vendor'}
+              vendorPhotoURL={logoUrl || undefined}
+            />
           )}
         </View>
       </ScrollView>
 
-      <Modal visible={createOpen} transparent animationType="fade" onRequestClose={() => setCreateOpen(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setCreateOpen(false)} />
-        <View style={styles.modalCenter}>
-          <View style={[styles.modalSheet, Shadows.card, { backgroundColor: theme.backgroundElement }]}>
-            <ThemedText type="smallBold" style={styles.modalTitle}>
-              New listing
-            </ThemedText>
-            <TextInput
-              value={newListingTitle}
-              onChangeText={setNewListingTitle}
-              placeholder="Listing title"
-              placeholderTextColor={theme.textSecondary}
-              style={[
-                styles.modalInput,
-                { color: theme.text, borderColor: theme.backgroundSelected },
-              ]}
-              autoFocus
-            />
-            <View style={styles.modalActions}>
-              <Pressable
-                onPress={() => setCreateOpen(false)}
-                style={[styles.modalCancel, { borderColor: theme.backgroundSelected }]}>
-                <ThemedText type="smallBold">Cancel</ThemedText>
-              </Pressable>
-              <Pressable
-                disabled={creating || !newListingTitle.trim()}
-                onPress={() => void confirmCreateListing()}
-                style={[
-                  styles.modalConfirm,
-                  {
-                    backgroundColor: theme.tint,
-                    opacity: creating || !newListingTitle.trim() ? 0.5 : 1,
-                  },
-                ]}>
-                <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
-                  {creating ? 'Creating…' : 'Create'}
-                </ThemedText>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ListingEditorSheet
+        visible={editorOpen}
+        vendorId={user.uid}
+        listing={editingListing}
+        onClose={() => {
+          setEditorOpen(false);
+          setEditingListing(null);
+        }}
+        onSaved={() => void load()}
+      />
     </ThemedView>
   );
 }
@@ -418,6 +422,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingBottom: Spacing.four,
     gap: Spacing.three,
+  },
+  sectionTabs: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  sectionTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingVertical: 10,
   },
   productsHeader: {
     flexDirection: 'row',

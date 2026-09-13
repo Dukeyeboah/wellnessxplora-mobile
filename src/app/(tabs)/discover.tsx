@@ -286,7 +286,6 @@ const styles = StyleSheet.create({
   filterDock: {
     position: 'absolute',
     right: Spacing.two,
-    // Vertically center the filter rail on the screen (slightly above true mid).
     top: '38%',
     zIndex: 40,
     elevation: 40,

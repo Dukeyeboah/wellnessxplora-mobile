@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { Shadows } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { requireAuth } from '@/lib/require-auth';
@@ -18,12 +19,15 @@ type Props = {
   size?: 'sm' | 'default';
   /** When true, hide the control once the viewer is already connected. */
   hideWhenConnected?: boolean;
+  /** `icon` = round FAB (+ person). `label` = Connect / Connected pill. */
+  variant?: 'label' | 'icon';
 };
 
 export function VendorFollowButton({
   vendorId,
   size = 'sm',
   hideWhenConnected = false,
+  variant = 'label',
 }: Props) {
   const theme = useTheme();
   const router = useRouter();
@@ -74,6 +78,47 @@ export function VendorFollowButton({
   };
 
   if (hideWhenConnected && loaded && following) return null;
+
+  if (variant === 'icon') {
+    return (
+      <Pressable
+        onPress={(e) => {
+          e.stopPropagation?.();
+          void toggle();
+        }}
+        disabled={busy || !loaded}
+        accessibilityLabel={following ? 'Disconnect' : 'Connect'}
+        style={[
+          styles.iconFab,
+          Shadows.button,
+          {
+            backgroundColor: following ? theme.tint : theme.backgroundElement,
+            opacity: !loaded ? 0.55 : 1,
+          },
+        ]}>
+        {busy ? (
+          <ActivityIndicator size="small" color={following ? '#FFFFFF' : theme.tint} />
+        ) : (
+          <View style={styles.iconStack}>
+            <Ionicons
+              name={following ? 'person' : 'person-outline'}
+              size={16}
+              color={following ? '#FFFFFF' : theme.text}
+            />
+            {!following ? (
+              <View style={[styles.plusBadge, { backgroundColor: theme.tint, borderColor: theme.backgroundElement }]}>
+                <Ionicons name="add" size={10} color="#FFFFFF" />
+              </View>
+            ) : (
+              <View style={[styles.plusBadge, { backgroundColor: '#FFFFFF', borderColor: theme.tint }]}>
+                <Ionicons name="checkmark" size={9} color={theme.tint} />
+              </View>
+            )}
+          </View>
+        )}
+      </Pressable>
+    );
+  }
 
   const compact = size === 'sm';
 
@@ -127,5 +172,29 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     alignSelf: 'center',
     minWidth: 88,
+  },
+  iconFab: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconStack: {
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plusBadge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -3,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
   },
 });

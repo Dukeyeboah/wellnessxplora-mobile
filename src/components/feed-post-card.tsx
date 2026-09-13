@@ -25,7 +25,10 @@ import { getCategoryBySlug } from '@/lib/explore-categories';
 import { resolveStorageImageUrl } from '@/lib/storage-url';
 import { fetchVendorProfileDoc } from '@/lib/user-profile';
 
-const WX_LOGO = require('@/assets/images/logo.png');
+const EDITORIAL_LOGO = require('@/assets/images/editorialLogo.png');
+const EDITORIAL_BADGE = require('@/assets/images/editorialBadge.png');
+
+const EDITORIAL_FILL = '#F0FDF4';
 
 function isListingEntity(entity: PostLinkedEntity): boolean {
   return entity.type === 'listing' || entity.type === 'product' || entity.type === 'service';
@@ -429,6 +432,7 @@ export function FeedPostCard({ post, vendorVerified, disableOpen }: Props) {
     setSaveCount(post.saveCount);
   }, [post.likeCount, post.saveCount]);
 
+  const isEditorial = post.authorType === 'wellnessxplora';
   const isOwnPost =
     Boolean(user) && (post.authorId === user?.uid || post.vendorId === user?.uid);
   const profileVendorId =
@@ -437,10 +441,7 @@ export function FeedPostCard({ post, vendorVerified, disableOpen }: Props) {
       : undefined;
   const showConnect = !isOwnPost && Boolean(profileVendorId);
 
-  const metaParts: string[] = [];
-  if (post.contentType === 'event') metaParts.push('Event');
-  if (primaryCategory) metaParts.push(primaryCategory);
-  metaParts.push(formatFeedTime(publishedAt));
+  const metaTime = formatFeedTime(publishedAt);
 
   const openDetail = () => {
     if (disableOpen) return;
@@ -453,6 +454,11 @@ export function FeedPostCard({ post, vendorVerified, disableOpen }: Props) {
     }
   };
 
+  const openCategory = () => {
+    if (!categorySlug) return;
+    router.push(`/category/${categorySlug}` as never);
+  };
+
   return (
     <Pressable
       onPress={openDetail}
@@ -460,43 +466,84 @@ export function FeedPostCard({ post, vendorVerified, disableOpen }: Props) {
         styles.card,
         Shadows.card,
         {
-          backgroundColor: theme.backgroundElement,
+          backgroundColor: isEditorial ? EDITORIAL_FILL : theme.backgroundElement,
           borderColor: theme.backgroundSelected,
           maxWidth: Math.min(width - Spacing.three * 2, 560),
           opacity: pressed && !disableOpen ? 0.96 : 1,
         },
       ]}>
       <View style={styles.header}>
-        <Pressable
-          onPress={(e) => {
-            e.stopPropagation?.();
-            openAuthor();
-          }}
-          style={styles.authorRow}
-          disabled={!profileVendorId}>
-          {post.authorType === 'wellnessxplora' ? (
-            <Image source={WX_LOGO} style={styles.avatar} contentFit="cover" />
-          ) : authorPhoto ? (
-            <Image source={{ uri: authorPhoto }} style={styles.avatar} contentFit="cover" />
-          ) : (
-            <View style={[styles.avatar, { backgroundColor: theme.backgroundSelected }]}>
-              <ThemedText type="smallBold">{displayName.charAt(0).toUpperCase()}</ThemedText>
-            </View>
-          )}
-          <View style={styles.authorMeta}>
+        <View style={styles.authorRow}>
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation?.();
+              openAuthor();
+            }}
+            style={styles.authorHit}
+            disabled={!profileVendorId}
+            accessibilityRole="link"
+            accessibilityLabel={`${displayName} profile`}>
+            {isEditorial ? (
+              <Image source={EDITORIAL_LOGO} style={styles.avatar} contentFit="cover" />
+            ) : authorPhoto ? (
+              <Image source={{ uri: authorPhoto }} style={styles.avatar} contentFit="cover" />
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: theme.backgroundSelected }]}>
+                <ThemedText type="smallBold">{displayName.charAt(0).toUpperCase()}</ThemedText>
+              </View>
+            )}
             <View style={styles.nameRow}>
               <ThemedText type="smallBold" numberOfLines={1} style={styles.name}>
                 {displayName}
               </ThemedText>
+              {isEditorial ? (
+                <Image
+                  source={EDITORIAL_BADGE}
+                  style={styles.editorialBadge}
+                  contentFit="contain"
+                  accessibilityLabel="Editorial"
+                />
+              ) : null}
               {post.authorType === 'vendor' && vendorVerified ? (
                 <VendorTrustBadges verified size="xs" />
               ) : null}
             </View>
-            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.meta}>
-              {metaParts.join(' · ')}
+          </Pressable>
+          <View style={styles.metaRow}>
+            {post.contentType === 'event' ? (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.meta}>
+                Event
+              </ThemedText>
+            ) : null}
+            {post.contentType === 'event' && (primaryCategory || metaTime) ? (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.meta}>
+                {' · '}
+              </ThemedText>
+            ) : null}
+            {primaryCategory && categorySlug ? (
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  openCategory();
+                }}
+                hitSlop={6}
+                accessibilityRole="link"
+                accessibilityLabel={`Category ${primaryCategory}`}>
+                <ThemedText type="small" style={[styles.meta, { color: theme.tint }]}>
+                  {primaryCategory}
+                </ThemedText>
+              </Pressable>
+            ) : null}
+            {primaryCategory && metaTime ? (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.meta}>
+                {' · '}
+              </ThemedText>
+            ) : null}
+            <ThemedText type="small" themeColor="textSecondary" style={styles.meta}>
+              {metaTime}
             </ThemedText>
           </View>
-        </Pressable>
+        </View>
         {showConnect && profileVendorId ? (
           <VendorFollowButton vendorId={profileVendorId} hideWhenConnected />
         ) : null}
@@ -567,7 +614,8 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.three,
     paddingBottom: Spacing.two,
   },
-  authorRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
+  authorRow: { flex: 1, minWidth: 0, gap: 0 },
+  authorHit: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
   avatar: {
     width: 36,
     height: 36,
@@ -576,10 +624,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  authorMeta: { flex: 1, minWidth: 0 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  name: { flexShrink: 1, fontSize: 14 },
-  meta: { fontSize: 11, marginTop: 2 },
+  nameRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },
+  name: { flexShrink: 1, fontSize: 14, lineHeight: 18 },
+  editorialBadge: {
+    width: 68,
+    height: 22,
+    flexShrink: 0,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginLeft: 46,
+    marginTop: -1,
+  },
+  meta: { fontSize: 11, lineHeight: 14 },
   mediaPad: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.two, gap: Spacing.two },
   mediaFrame: {
     width: '100%',

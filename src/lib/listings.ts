@@ -527,3 +527,27 @@ export async function fetchListingsByVendorId(vendorId: string): Promise<Explore
   const rows = snap.docs.map((d) => mapListingDoc(d.id, d.data() as Record<string, unknown>));
   return enrichListings(rows);
 }
+
+/** Client-side vendor search by business name, username, or description. */
+export async function searchVendorsByQuery(
+  rawQuery: string,
+  max = 12,
+): Promise<ExploreVendor[]> {
+  const q = rawQuery.trim().toLowerCase();
+  if (q.length < 2) return [];
+
+  const snap = await getDocs(collection(db, 'vendors'));
+  const hits: ExploreVendor[] = [];
+  for (const d of snap.docs) {
+    const data = d.data() as Record<string, unknown>;
+    if (data.deactivated === true) continue;
+    const vendor = mapVendorDoc(d.id, data);
+    const username = String(data.username ?? '').toLowerCase();
+    const desc = String(data.description ?? '').toLowerCase();
+    const name = vendor.name.toLowerCase();
+    if (!name.includes(q) && !username.includes(q) && !desc.includes(q)) continue;
+    hits.push(vendor);
+    if (hits.length >= max) break;
+  }
+  return hits;
+}
