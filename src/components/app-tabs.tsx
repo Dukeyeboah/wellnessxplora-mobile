@@ -176,11 +176,13 @@ export default function AppTabs() {
       <Tabs.Screen name='category' options={{ href: null }} />
       <Tabs.Screen name='vendor' options={{ href: null }} />
       <Tabs.Screen name='post' options={{ href: null }} />
-      <Tabs.Screen name='dashboard' options={{ href: null }} />
+      <Tabs.Screen name='favorites' options={{ href: null }} />
       <Tabs.Screen name='profile-edit' options={{ href: null }} />
       <Tabs.Screen name='admin' options={{ href: null }} />
       <Tabs.Screen name='admin-manage' options={{ href: null }} />
       <Tabs.Screen name='cart' options={{ href: null }} />
+      <Tabs.Screen name='connections' options={{ href: null }} />
+      <Tabs.Screen name='categories' options={{ href: null }} />
       <Tabs.Screen
         name='discover'
         options={{
@@ -223,12 +225,12 @@ export default function AppTabs() {
         }}
       />
       <Tabs.Screen
-        name='favorites'
+        name='dashboard'
         options={{
-          title: 'Saved',
+          title: 'Dashboard',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
-              name={focused ? 'bookmark' : 'bookmark-outline'}
+              name={focused ? 'grid' : 'grid-outline'}
               color={color}
               focused={focused}
               tint={colors.tint}

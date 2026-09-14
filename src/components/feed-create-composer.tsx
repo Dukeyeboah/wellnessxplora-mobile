@@ -397,7 +397,7 @@ export function FeedCreateComposer({
           authorType,
           authorName,
           authorPhotoURL,
-          vendorId: authorType === 'vendor' ? vendorId ?? user.uid : '',
+          vendorId: vendorId ?? user.uid,
           caption,
           contentType: resolvedContentType,
           status: 'published',

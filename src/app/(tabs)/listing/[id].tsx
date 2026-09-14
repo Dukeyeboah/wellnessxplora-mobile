@@ -20,7 +20,7 @@ import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { VendorTrustBadges } from '@/components/vendor-trust-badges';
-import { BottomTabInset, MaxContentWidth, Shadows, Spacing } from '@/constants/theme';
+import { BottomTabInset, EngagementColors, MaxContentWidth, Shadows, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { useChrome, useScrollChrome } from '@/lib/chrome';
@@ -186,21 +186,19 @@ export default function ListingDetailScreen() {
   const from = firstParam(params.from);
 
   const goBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
     if (fromVendor) {
-      if (router.canGoBack()) router.back();
-      else router.push(`/vendor/${fromVendor}`);
+      router.replace(`/vendor/${fromVendor}` as never);
       return;
     }
     if (from === 'discover') {
-      if (router.canGoBack()) router.back();
-      else router.replace('/discover');
+      router.replace('/discover' as never);
       return;
     }
-    if (router.canGoBack()) {
-      router.dismissTo('/explore');
-      return;
-    }
-    router.replace('/explore');
+    router.replace('/explore' as never);
   };
 
   if (loading) {
@@ -230,6 +228,52 @@ export default function ListingDetailScreen() {
 
   return (
     <ThemedView style={styles.screen}>
+      <Pressable
+        onPress={goBack}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        style={[
+          styles.backButton,
+          Shadows.button,
+          { top: insets.top + 8, backgroundColor: theme.backgroundElement },
+        ]}>
+        <Ionicons name="chevron-back" size={22} color={theme.text} />
+      </Pressable>
+      <Pressable
+        onPress={() => {
+          if (!listing || !user) {
+            requireAuth(!!user, router, 'favorite');
+            return;
+          }
+          void toggleListingFavorite(true, router, user.uid, {
+            listingId: listing.id,
+            vendorId: listing.vendorId,
+            listingTitle: listing.title,
+            listingType: listing.type,
+            vendorName: listing.vendorName,
+            category: listing.categoryTitle ?? '',
+            price: listing.price,
+            currency: listing.currency,
+            imageUrl: listing.imageUrl,
+          }).then((next) => {
+            if (typeof next === 'boolean') setFavorited(next);
+          });
+        }}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel={favorited ? 'Remove bookmark' : 'Bookmark'}
+        style={[
+          styles.saveButton,
+          Shadows.button,
+          { top: insets.top + 8, backgroundColor: theme.backgroundElement },
+        ]}>
+        <Ionicons
+          name={favorited ? 'bookmark' : 'bookmark-outline'}
+          size={20}
+          color={favorited ? EngagementColors.bookmark : theme.text}
+        />
+      </Pressable>
       <ScrollView
         {...scrollChrome}
         contentContainerStyle={[
@@ -247,46 +291,6 @@ export default function ListingDetailScreen() {
           ) : (
             <View style={[styles.hero, { backgroundColor: theme.backgroundSelected }]} />
           )}
-          <Pressable
-            onPress={goBack}
-            style={[
-              styles.backButton,
-              Shadows.button,
-              { top: insets.top + 8, backgroundColor: theme.backgroundElement },
-            ]}>
-            <Ionicons name="chevron-back" size={22} color={theme.text} />
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              if (!listing || !user) {
-                requireAuth(!!user, router, 'favorite');
-                return;
-              }
-              void toggleListingFavorite(true, router, user.uid, {
-                listingId: listing.id,
-                vendorId: listing.vendorId,
-                listingTitle: listing.title,
-                listingType: listing.type,
-                vendorName: listing.vendorName,
-                category: listing.categoryTitle ?? '',
-                price: listing.price,
-                currency: listing.currency,
-                imageUrl: listing.imageUrl,
-              }).then((next) => {
-                if (typeof next === 'boolean') setFavorited(next);
-              });
-            }}
-            style={[
-              styles.heartButton,
-              Shadows.button,
-              { top: insets.top + 8, backgroundColor: theme.backgroundElement },
-            ]}>
-            <Ionicons
-              name={favorited ? 'heart' : 'heart-outline'}
-              size={20}
-              color={favorited ? '#E11D48' : theme.text}
-            />
-          </Pressable>
         </View>
 
         <View style={styles.body}>
@@ -326,9 +330,7 @@ export default function ListingDetailScreen() {
               onPress={() => {
                 if (listing.vendorId) {
                   router.push(
-                    listing.categorySlug
-                      ? `/vendor/${listing.vendorId}?from=${listing.categorySlug}`
-                      : `/vendor/${listing.vendorId}`,
+                    `/vendor/${listing.vendorId}?fromListing=${listing.id}` as never,
                   );
                 }
               }}
@@ -567,16 +569,19 @@ const styles = StyleSheet.create({
   backButton: {
     position: 'absolute',
     left: Spacing.three,
-    zIndex: 10,
+    zIndex: 30,
+    elevation: 8,
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heartButton: {
+  saveButton: {
     position: 'absolute',
     right: Spacing.three,
+    zIndex: 30,
+    elevation: 8,
     zIndex: 10,
     width: 40,
     height: 40,

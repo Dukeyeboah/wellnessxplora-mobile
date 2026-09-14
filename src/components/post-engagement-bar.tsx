@@ -6,6 +6,7 @@ import { Pressable, Share, StyleSheet, View } from 'react-native';
 
 import { PostAddToStoryButton } from '@/components/post-add-to-story-button';
 import { ThemedText } from '@/components/themed-text';
+import { EngagementColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import type { FeedPost } from '@/lib/feed-posts';
@@ -153,7 +154,7 @@ export function PostEngagementBar({
       <Ionicons
         name={liked ? 'heart' : 'heart-outline'}
         size={20}
-        color={liked ? '#EF4444' : theme.textSecondary}
+        color={liked ? EngagementColors.like : theme.textSecondary}
       />
       {likes > 0 ? (
         <ThemedText type="small" themeColor="textSecondary" style={styles.count}>
@@ -189,7 +190,7 @@ export function PostEngagementBar({
       <Ionicons
         name={saved ? 'bookmark' : 'bookmark-outline'}
         size={20}
-        color={saved ? theme.tint : theme.textSecondary}
+        color={saved ? EngagementColors.bookmark : theme.textSecondary}
       />
       {saves > 0 ? (
         <ThemedText type="small" themeColor="textSecondary" style={styles.count}>

@@ -113,16 +113,12 @@ export default function DashboardScreen() {
   }, [user]);
 
   useEffect(() => {
-    if (!user) {
-      router.replace('/profile');
-      return;
-    }
-    if (userRole !== 'vendor') {
-      router.replace('/profile');
+    if (!user || userRole !== 'vendor') {
+      setLoading(false);
       return;
     }
     void load();
-  }, [user, userRole, load, router]);
+  }, [user, userRole, load]);
 
   const primaryCategory = useMemo(() => {
     const first = categorySlugs[0];
@@ -162,7 +158,62 @@ export default function DashboardScreen() {
     ]);
   };
 
-  if (!user || userRole !== 'vendor') return null;
+  if (!user) {
+    return (
+      <ThemedView style={styles.centered}>
+        <Ionicons name="grid-outline" size={36} color={theme.tint} />
+        <ThemedText type="smallBold" style={{ textAlign: 'center', marginTop: Spacing.two }}>
+          Dashboard
+        </ThemedText>
+        <ThemedText
+          type="small"
+          themeColor="textSecondary"
+          style={{ textAlign: 'center', paddingHorizontal: Spacing.five }}>
+          Sign in to manage your posts and products. Vendors and service providers can list items
+          here after upgrading from account settings.
+        </ThemedText>
+        <Pressable
+          onPress={() => router.push('/profile?auth=login' as never)}
+          style={[styles.guestCta, { backgroundColor: theme.tint }]}>
+          <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
+            Sign in
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/profile?auth=signup' as never)}
+          style={{ marginTop: Spacing.two }}>
+          <ThemedText type="smallBold" style={{ color: theme.tint }}>
+            Create an account
+          </ThemedText>
+        </Pressable>
+      </ThemedView>
+    );
+  }
+
+  if (userRole !== 'vendor') {
+    return (
+      <ThemedView style={styles.centered}>
+        <Ionicons name="grid-outline" size={36} color={theme.tint} />
+        <ThemedText type="smallBold" style={{ textAlign: 'center', marginTop: Spacing.two }}>
+          Dashboard
+        </ThemedText>
+        <ThemedText
+          type="small"
+          themeColor="textSecondary"
+          style={{ textAlign: 'center', paddingHorizontal: Spacing.five }}>
+          You’re signed in as a member. Become a vendor from account settings to manage products,
+          services, and storefront posts here.
+        </ThemedText>
+        <Pressable
+          onPress={() => router.push('/profile' as never)}
+          style={[styles.guestCta, { backgroundColor: theme.tint }]}>
+          <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
+            Go to account settings
+          </ThemedText>
+        </Pressable>
+      </ThemedView>
+    );
+  }
 
   if (loading) {
     return (
@@ -183,15 +234,6 @@ export default function DashboardScreen() {
           ) : (
             <View style={[styles.cover, { backgroundColor: theme.backgroundSelected }]} />
           )}
-          <Pressable
-            onPress={() => router.back()}
-            style={[
-              styles.backButton,
-              Shadows.button,
-              { top: insets.top + 8, backgroundColor: theme.backgroundElement },
-            ]}>
-            <Ionicons name="chevron-back" size={22} color={theme.text} />
-          </Pressable>
         </View>
 
         <View style={[styles.infoCard, { backgroundColor: theme.backgroundElement }]}>
@@ -359,18 +401,20 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  cover: { width: '100%', height: 180 },
-  backButton: {
-    position: 'absolute',
-    left: Spacing.three,
-    zIndex: 10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  centered: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: Spacing.two,
+    padding: Spacing.four,
   },
+  guestCta: {
+    marginTop: Spacing.two,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  cover: { width: '100%', height: 180 },
   infoCard: {
     marginTop: -36,
     paddingHorizontal: Spacing.three,

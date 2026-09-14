@@ -24,7 +24,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { VendorFollowButton } from '@/components/vendor-follow-button';
 import { VendorTrustBadges } from '@/components/vendor-trust-badges';
-import { BottomTabInset, Fonts, Shadows, Spacing } from '@/constants/theme';
+import { BottomTabInset, EngagementColors, Fonts, Shadows, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { useChrome, useScrollChrome } from '@/lib/chrome';
@@ -59,12 +59,16 @@ const WHATSAPP = '#25D366';
 const BOOKMARK_BG = '#FFF7ED';
 
 export default function VendorDetailScreen() {
-  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
+  const { id, from, fromListing } = useLocalSearchParams<{
+    id: string;
+    from?: string;
+    fromListing?: string;
+  }>();
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
   const { resetChrome } = useChrome();
   const scrollChrome = useScrollChrome();
 
@@ -94,6 +98,11 @@ export default function VendorDetailScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    setContentTab('products');
+    setPosts([]);
+    setListings([]);
+    setVendor(null);
+    setLoading(true);
     (async () => {
       if (!id) {
         setError('Missing vendor id.');
@@ -110,6 +119,8 @@ export default function VendorDetailScreen() {
           else {
             setVendor(vendorRow);
             setListings(vendorListings);
+            // Products first when they exist; otherwise open Posts.
+            setContentTab(vendorListings.length > 0 ? 'products' : 'posts');
             if (user) {
               const saved = await getVendorFavoriteState(user.uid, id);
               if (!cancelled) setFavorited(saved);
@@ -188,9 +199,22 @@ export default function VendorDetailScreen() {
     }
   };
 
+  const listingId = typeof fromListing === 'string' ? fromListing : '';
+
   const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.push('/explore');
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    if (listingId) {
+      router.replace(`/listing/${listingId}` as never);
+      return;
+    }
+    if (typeof from === 'string' && from) {
+      router.replace(`/category/${from}` as never);
+      return;
+    }
+    router.replace('/explore' as never);
   };
 
   const openWhatsApp = async () => {
@@ -248,6 +272,18 @@ export default function VendorDetailScreen() {
 
   return (
     <ThemedView style={styles.screen}>
+      <Pressable
+        onPress={goBack}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        style={[
+          styles.backButton,
+          Shadows.button,
+          { top: insets.top + 8, backgroundColor: theme.backgroundElement },
+        ]}>
+        <Ionicons name="chevron-back" size={22} color={theme.text} />
+      </Pressable>
       <ScrollView
         {...scrollChrome}
         contentContainerStyle={{ paddingBottom: insets.bottom + BottomTabInset + Spacing.five }}>
@@ -257,15 +293,6 @@ export default function VendorDetailScreen() {
           ) : (
             <View style={[styles.cover, { backgroundColor: theme.backgroundSelected }]} />
           )}
-          <Pressable
-            onPress={goBack}
-            style={[
-              styles.backButton,
-              Shadows.button,
-              { top: insets.top + 8, backgroundColor: theme.backgroundElement },
-            ]}>
-            <Ionicons name="chevron-back" size={22} color={theme.text} />
-          </Pressable>
         </View>
 
         <View style={[styles.infoCard, { backgroundColor: theme.backgroundElement }]}>
@@ -329,7 +356,7 @@ export default function VendorDetailScreen() {
                 <Ionicons
                   name={favorited ? 'bookmark' : 'bookmark-outline'}
                   size={18}
-                  color={favorited ? '#EA580C' : theme.text}
+                  color={favorited ? EngagementColors.bookmark : theme.text}
                 />
               </Pressable>
               {!isOwnVendor ? <VendorFollowButton vendorId={vendor.id} variant="icon" /> : null}
@@ -554,9 +581,32 @@ export default function VendorDetailScreen() {
           {contentTab === 'products' ? (
             <>
               {listings.length === 0 ? (
-                <ThemedText type="small" themeColor="textSecondary">
-                  No active products yet.
-                </ThemedText>
+                isOwnVendor && userRole !== 'vendor' ? (
+                  <View style={styles.memberProductsEmpty}>
+                    <Ionicons name="storefront-outline" size={28} color={theme.tint} />
+                    <ThemedText type="smallBold" style={{ textAlign: 'center' }}>
+                      Member account
+                    </ThemedText>
+                    <ThemedText
+                      type="small"
+                      themeColor="textSecondary"
+                      style={{ textAlign: 'center' }}>
+                      You have a member account, not a vendor account. Become a vendor in account
+                      settings to list products or services.
+                    </ThemedText>
+                    <Pressable
+                      onPress={() => router.push('/profile' as never)}
+                      style={[styles.memberCta, { backgroundColor: theme.tint }]}>
+                      <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
+                        Go to account settings
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    No active products yet.
+                  </ThemedText>
+                )
               ) : (
                 <View style={styles.productGrid}>
                   {listings.map((item) => (
@@ -610,7 +660,8 @@ const styles = StyleSheet.create({
   backButton: {
     position: 'absolute',
     left: Spacing.three,
-    zIndex: 10,
+    zIndex: 30,
+    elevation: 8,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -788,6 +839,18 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: Spacing.three,
     marginTop: Spacing.two,
+  },
+  memberProductsEmpty: {
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.four,
+    paddingHorizontal: Spacing.three,
+  },
+  memberCta: {
+    marginTop: Spacing.two,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
   },
   postsList: {
     gap: Spacing.three,

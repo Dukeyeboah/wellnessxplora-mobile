@@ -24,6 +24,10 @@ import {
 import { getEventStartsAt } from '@/lib/event-posts';
 import { resolveStorageImageUrl } from '@/lib/storage-url';
 
+const EDITORIAL_LOGO = require('@/assets/images/editorialLogo.png');
+const EDITORIAL_BADGE = require('@/assets/images/editorialBadge.png');
+const EDITORIAL_FILL = '#F0FDF4';
+
 type Props = {
   vendorId: string;
   vendorName: string;
@@ -136,6 +140,7 @@ export function VendorPostsManager({ vendorId, vendorName, vendorPhotoURL }: Pro
             const src = thumb(post);
             const starts = getEventStartsAt(post);
             const busy = busyId === post.id;
+            const isEditorial = post.authorType === 'wellnessxplora';
             return (
               <View
                 key={post.id}
@@ -143,12 +148,14 @@ export function VendorPostsManager({ vendorId, vendorName, vendorPhotoURL }: Pro
                   styles.row,
                   {
                     borderColor: theme.backgroundSelected,
-                    backgroundColor: theme.backgroundElement,
+                    backgroundColor: isEditorial ? EDITORIAL_FILL : theme.backgroundElement,
                   },
                 ]}>
                 <View style={[styles.thumb, { backgroundColor: theme.backgroundSelected }]}>
                   {src ? (
                     <Image source={{ uri: src }} style={styles.thumbImg} contentFit="cover" />
+                  ) : isEditorial ? (
+                    <Image source={EDITORIAL_LOGO} style={styles.thumbImg} contentFit="cover" />
                   ) : (
                     <ThemedText type="small" themeColor="textSecondary" style={styles.thumbFallback}>
                       {post.contentType === 'event' ? 'Event' : 'Text'}
@@ -157,6 +164,18 @@ export function VendorPostsManager({ vendorId, vendorName, vendorPhotoURL }: Pro
                 </View>
                 <View style={styles.meta}>
                   <View style={styles.badges}>
+                    {isEditorial ? (
+                      <Image
+                        source={EDITORIAL_BADGE}
+                        style={styles.editorialBadge}
+                        contentFit="contain"
+                        accessibilityLabel="Editorial"
+                      />
+                    ) : (
+                      <ThemedText type="small" style={[styles.badge, { color: theme.tint }]}>
+                        Your post
+                      </ThemedText>
+                    )}
                     <ThemedText type="small" style={[styles.badge, { color: theme.textSecondary }]}>
                       {post.status}
                     </ThemedText>
@@ -221,10 +240,14 @@ export function VendorPostsManager({ vendorId, vendorName, vendorPhotoURL }: Pro
           setEditPost(null);
         }}
         onCreated={() => void reload()}
-        authorType="vendor"
-        authorName={vendorName}
-        authorPhotoURL={vendorPhotoURL}
-        vendorId={vendorId}
+        authorType={editPost?.authorType === 'wellnessxplora' ? 'wellnessxplora' : 'vendor'}
+        authorName={
+          editPost?.authorType === 'wellnessxplora' ? 'WellnessXplora' : vendorName
+        }
+        authorPhotoURL={
+          editPost?.authorType === 'wellnessxplora' ? undefined : vendorPhotoURL
+        }
+        vendorId={editPost?.authorType === 'wellnessxplora' ? undefined : vendorId}
         editPost={editPost}
       />
     </View>
@@ -272,6 +295,7 @@ const styles = StyleSheet.create({
   meta: { flex: 1, minWidth: 0, gap: 6 },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
   badge: { fontSize: 11, textTransform: 'capitalize' },
+  editorialBadge: { width: 68, height: 22 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   actionBtn: {
     flexDirection: 'row',

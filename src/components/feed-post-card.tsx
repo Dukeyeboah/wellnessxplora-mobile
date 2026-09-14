@@ -435,11 +435,10 @@ export function FeedPostCard({ post, vendorVerified, disableOpen }: Props) {
   const isEditorial = post.authorType === 'wellnessxplora';
   const isOwnPost =
     Boolean(user) && (post.authorId === user?.uid || post.vendorId === user?.uid);
+  // Prefer storefront id; fall back to author so WellnessXplora / admin profiles open.
   const profileVendorId =
-    post.authorType === 'vendor'
-      ? post.vendorId?.trim() || post.authorId.trim() || undefined
-      : undefined;
-  const showConnect = !isOwnPost && Boolean(profileVendorId);
+    post.vendorId?.trim() || post.authorId.trim() || undefined;
+  const showConnect = !isOwnPost && Boolean(profileVendorId) && post.authorType === 'vendor';
 
   const metaTime = formatFeedTime(publishedAt);
 

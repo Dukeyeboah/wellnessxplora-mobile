@@ -8,7 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ListingRatingSummary } from '@/components/listing-rating-summary';
 import { VendorTrustBadges } from '@/components/vendor-trust-badges';
-import { Shadows, Spacing } from '@/constants/theme';
+import { EngagementColors, Shadows, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { formatListingPrice, type ExploreListing } from '@/lib/listings';
@@ -74,8 +74,7 @@ export function ExploreListingCard({
     const path = fromVendor
       ? `/listing/${listing.id}?fromVendor=${fromVendor}`
       : `/listing/${listing.id}`;
-    if (fromVendor) router.push(path as never);
-    else router.replace(path as never);
+    router.push(path as never);
   };
 
   const openVendor = () => {
@@ -118,9 +117,9 @@ export function ExploreListingCard({
         onPress={onFavorite}
         style={[styles.overlayBtn, styles.overlayLeft, { backgroundColor: theme.background }]}>
         <Ionicons
-          name={favorited ? 'heart' : 'heart-outline'}
+          name={favorited ? 'bookmark' : 'bookmark-outline'}
           size={grid ? 14 : 16}
-          color={favorited ? '#E11D48' : theme.text}
+          color={favorited ? EngagementColors.bookmark : theme.text}
         />
       </Pressable>
       <Pressable
@@ -144,9 +143,9 @@ export function ExploreListingCard({
       onPress={onFavorite}
       style={[styles.overlayBtn, styles.overlayRight, { backgroundColor: theme.background }]}>
       <Ionicons
-        name={favorited ? 'heart' : 'heart-outline'}
+        name={favorited ? 'bookmark' : 'bookmark-outline'}
         size={grid ? 14 : 16}
-        color={favorited ? '#E11D48' : theme.text}
+        color={favorited ? EngagementColors.bookmark : theme.text}
       />
     </Pressable>
   );

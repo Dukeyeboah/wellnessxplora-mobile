@@ -36,8 +36,10 @@ export function VendorFollowButton({
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const isOwnStorefront = Boolean(user && user.uid === vendorId);
+
   useEffect(() => {
-    if (!user) {
+    if (!user || isOwnStorefront) {
       setFollowing(false);
       setLoaded(true);
       return;
@@ -59,11 +61,11 @@ export function VendorFollowButton({
     return () => {
       cancelled = true;
     };
-  }, [user, vendorId]);
+  }, [user, vendorId, isOwnStorefront]);
 
   const toggle = async () => {
     if (!requireAuth(Boolean(user), router, 'follow')) return;
-    if (!user || busy) return;
+    if (!user || busy || isOwnStorefront) return;
     setBusy(true);
     const wasFollowing = following;
     setFollowing(!wasFollowing);
@@ -76,6 +78,8 @@ export function VendorFollowButton({
       setBusy(false);
     }
   };
+
+  if (isOwnStorefront) return null;
 
   if (hideWhenConnected && loaded && following) return null;
 

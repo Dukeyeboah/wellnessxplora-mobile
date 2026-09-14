@@ -1,6 +1,7 @@
 import { createElement, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -56,12 +57,14 @@ export default function ProfileScreen() {
     signupWithGoogle,
     startPhoneLogin,
     confirmPhoneLogin,
+    upgradeToVendorRole,
     logout,
   } = useAuth();
   const nativeGoogle = useNativeGoogleSignIn();
 
   const [authScreen, setAuthScreen] = useState<AuthScreen>('signup');
-  const [accountType, setAccountType] = useState<UserRole | null>(null);
+  /** Default: everyone starts as a member; vendor is optional at signup or later. */
+  const [accountType, setAccountType] = useState<UserRole>('explorer');
   const [method, setMethod] = useState<Method>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -70,6 +73,7 @@ export default function ProfileScreen() {
   const [smsCode, setSmsCode] = useState('');
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const redirectToDiscoverAfterAuth = useRef(false);
 
@@ -77,6 +81,12 @@ export default function ProfileScreen() {
     if (authParam === 'login') setAuthScreen('login');
     else if (authParam === 'signup') setAuthScreen('signup');
   }, [authParam]);
+
+  useEffect(() => {
+    if (authScreen === 'signup') {
+      setPendingSignupRole(accountType);
+    }
+  }, [authScreen, accountType]);
 
   useEffect(() => {
     if (!user || loading || !redirectToDiscoverAfterAuth.current) return;
@@ -93,8 +103,8 @@ export default function ProfileScreen() {
   const switchScreen = (next: AuthScreen) => {
     setAuthScreen(next);
     setMethod(null);
-    setAccountType(null);
-    setPendingSignupRole(null);
+    setAccountType('explorer');
+    setPendingSignupRole(next === 'signup' ? 'explorer' : null);
     setError(null);
   };
 
@@ -103,13 +113,36 @@ export default function ProfileScreen() {
     router.replace('/discover' as never);
   };
 
+  const onBecomeVendor = () => {
+    Alert.alert(
+      'Become a vendor?',
+      'This unlocks Dashboard, products, and posting as your business. You can finish your storefront details next.',
+      [
+        { text: 'Not now', style: 'cancel' },
+        {
+          text: 'Continue',
+          onPress: () => {
+            void (async () => {
+              setUpgrading(true);
+              setError(null);
+              try {
+                await upgradeToVendorRole();
+                router.push('/profile-edit' as never);
+              } catch (err) {
+                setError(getAuthErrorMessage(err));
+              } finally {
+                setUpgrading(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
   const onEmailSubmit = async () => {
     setError(null);
     if (authScreen === 'signup') {
-      if (!accountType) {
-        setError('Select Vendor or Explorer before continuing.');
-        return;
-      }
       if (password !== confirmPassword) {
         setError('Passwords do not match.');
         return;
@@ -117,7 +150,7 @@ export default function ProfileScreen() {
     }
     setSubmitting(true);
     try {
-      if (authScreen === 'signup' && accountType) {
+      if (authScreen === 'signup') {
         await signup(email, password, accountType);
       } else {
         await login(email, password);
@@ -132,14 +165,10 @@ export default function ProfileScreen() {
 
   const onGoogle = async () => {
     setError(null);
-    if (authScreen === 'signup' && !accountType) {
-      setError('Select Vendor or Explorer before continuing.');
-      return;
-    }
     setSubmitting(true);
     try {
       if (Platform.OS === 'web') {
-        if (authScreen === 'signup' && accountType) {
+        if (authScreen === 'signup') {
           await signupWithGoogle(accountType);
         } else {
           await loginWithGoogle();
@@ -164,10 +193,6 @@ export default function ProfileScreen() {
 
   const onSendCode = async () => {
     setError(null);
-    if (authScreen === 'signup' && !accountType) {
-      setError('Select Vendor or Explorer before continuing.');
-      return;
-    }
     setSubmitting(true);
     try {
       setPendingSignupRole(authScreen === 'signup' ? accountType : null);
@@ -286,9 +311,34 @@ export default function ProfileScreen() {
                     subtitle="Manage listings and storefront"
                     onPress={() => router.push('/dashboard' as never)}
                   />
-                ) : null}
+                ) : (
+                  <>
+                    <AccountMenuRow
+                      icon="grid-outline"
+                      label="Dashboard"
+                      subtitle="Posts and products when you become a vendor"
+                      onPress={() => router.push('/dashboard' as never)}
+                    />
+                    <AccountMenuRow
+                      icon="storefront-outline"
+                      label={upgrading ? 'Setting up storefront…' : 'Become a vendor'}
+                      subtitle="Sell products, post, and get followers"
+                      onPress={onBecomeVendor}
+                    />
+                  </>
+                )}
                 <AccountMenuRow
-                  icon="heart-outline"
+                  icon="people-outline"
+                  label="Connections"
+                  subtitle={
+                    userRole === 'vendor'
+                      ? 'Following, followers, and mutuals'
+                      : 'People you connected with'
+                  }
+                  onPress={() => router.push('/connections' as never)}
+                />
+                <AccountMenuRow
+                  icon="bookmark-outline"
                   label="Favorites"
                   subtitle="Saved products and vendors"
                   onPress={() => router.push('/favorites')}
@@ -305,6 +355,11 @@ export default function ProfileScreen() {
                   subtitle="Photo, contact, and location"
                   onPress={() => router.push('/profile-edit' as never)}
                 />
+                {error && user ? (
+                  <ThemedText type="small" style={styles.error}>
+                    {error}
+                  </ThemedText>
+                ) : null}
                 <AccountMenuRow
                   icon="log-out-outline"
                   label="Sign out"
@@ -322,37 +377,16 @@ export default function ProfileScreen() {
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
                   {authScreen === 'signup'
-                    ? 'Sign up for your WellnessXplora account'
+                    ? 'Join as a member — browse, save, and connect. Sell later anytime.'
                     : 'Log in with your WellnessXplora account'}
                 </ThemedText>
 
                 {authScreen === 'signup' ? (
                   <View style={styles.roleBlock}>
                     <ThemedText type="smallBold" style={styles.roleHeading}>
-                      Select account type
+                      How do you want to start?
                     </ThemedText>
                     <View style={styles.roleRow}>
-                      <Pressable
-                        onPress={() => {
-                          setAccountType('vendor');
-                          setPendingSignupRole('vendor');
-                        }}
-                        style={[
-                          styles.roleCard,
-                          {
-                            borderColor:
-                              accountType === 'vendor' ? '#C9A227' : theme.backgroundSelected,
-                            backgroundColor:
-                              accountType === 'vendor' ? '#FFF8E8' : theme.backgroundElement,
-                          },
-                        ]}>
-                        <ThemedText type="smallBold" style={styles.roleCardText}>
-                          Vendor (seller)
-                        </ThemedText>
-                        <ThemedText type="small" themeColor="textSecondary" style={styles.roleCardText}>
-                          List your business
-                        </ThemedText>
-                      </Pressable>
                       <Pressable
                         onPress={() => {
                           setAccountType('explorer');
@@ -368,27 +402,47 @@ export default function ProfileScreen() {
                           },
                         ]}>
                         <ThemedText type="smallBold" style={styles.roleCardText}>
-                          Explorer (buyer)
+                          Member
                         </ThemedText>
                         <ThemedText type="small" themeColor="textSecondary" style={styles.roleCardText}>
-                          Browse & discover
+                          Browse, save & connect
+                        </ThemedText>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          setAccountType('vendor');
+                          setPendingSignupRole('vendor');
+                        }}
+                        style={[
+                          styles.roleCard,
+                          {
+                            borderColor:
+                              accountType === 'vendor' ? '#C9A227' : theme.backgroundSelected,
+                            backgroundColor:
+                              accountType === 'vendor' ? '#FFF8E8' : theme.backgroundElement,
+                          },
+                        ]}>
+                        <ThemedText type="smallBold" style={styles.roleCardText}>
+                          Vendor
+                        </ThemedText>
+                        <ThemedText type="small" themeColor="textSecondary" style={styles.roleCardText}>
+                          List products too
                         </ThemedText>
                       </Pressable>
                     </View>
+                    <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
+                      {accountType === 'vendor'
+                        ? 'You’ll get a storefront right away. You can edit business details after signup.'
+                        : 'Recommended. You can become a vendor anytime from account settings.'}
+                    </ThemedText>
                   </View>
-                ) : null}
-
-                {authScreen === 'signup' && !accountType ? (
-                  <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-                    Select an account type to sign up
-                  </ThemedText>
                 ) : null}
 
                 <GoogleAuthButton
                   label={
                     authScreen === 'signup' ? 'Sign up with Google' : 'Log in with Google'
                   }
-                  disabled={submitting || (authScreen === 'signup' && !accountType)}
+                  disabled={submitting}
                   loading={submitting && method === null}
                   onPress={() => void onGoogle()}
                 />
@@ -466,7 +520,7 @@ export default function ProfileScreen() {
                         submitting ||
                         !email ||
                         !password ||
-                        (authScreen === 'signup' && (!accountType || !confirmPassword))
+                        (authScreen === 'signup' && !confirmPassword)
                       }
                       onPress={() => void onEmailSubmit()}
                       style={({ pressed }) => [
@@ -477,7 +531,7 @@ export default function ProfileScreen() {
                             submitting ||
                             !email ||
                             !password ||
-                            (authScreen === 'signup' && (!accountType || !confirmPassword))
+                            (authScreen === 'signup' && !confirmPassword)
                               ? 0.4
                               : pressed
                                 ? 0.85

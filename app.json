@@ -42,7 +42,14 @@
         }
       ],
       "expo-asset",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow WellnessXplora to access your photos for listing images.",
+          "cameraPermission": "Allow WellnessXplora to use your camera for listing photos."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

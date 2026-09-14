@@ -188,7 +188,7 @@ export function groupStoriesByAuthor(stories: FeedStory[]): StoryAuthorGroup[] {
 }
 
 export const STORY_PERMISSION_ERROR_MESSAGE =
-  'Stories are temporarily unavailable. Public story reads need an updated Firestore rules deploy from the web repo.';
+  'Stories could not be loaded. If this keeps happening, ask an admin to redeploy Firestore rules for public story reads.';
 
 export const STORY_INDEX_ERROR_MESSAGE =
   'Stories are almost ready — a database index is still building. Try again in a few minutes.';
@@ -212,14 +212,8 @@ function isIndexError(error: unknown): boolean {
 }
 
 /**
- * Fetch live stories for everyone (including guests).
- *
- * Tries both public query shapes:
- * 1) status + visibility + expiresAt — matches older rules that required visibility
- * 2) status + expiresAt — matches current rules + the standard composite index
- *
- * Admins get an extra recent-stories pass. Own-author reads fill gaps for creators.
- * Returns `{ stories, error }` only when every public query failed.
+ * Fetch stories for everyone (including guests) — same pattern as posts:
+ * query status + visibility (+ orderBy createdAt), filter 24h expiry in the client.
  */
 export async function fetchActiveStories(
   pageSize = 80,
@@ -237,42 +231,54 @@ export async function fetchActiveStories(
     }
   };
 
-  const tryPublic = async (includeVisibility: boolean) => {
-    const now = Timestamp.now();
-    const constraints = includeVisibility
-      ? [
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, 'stories'),
+        where('status', '==', 'published'),
+        where('visibility', '==', 'public'),
+        orderBy('createdAt', 'desc'),
+        limit(pageSize),
+      ),
+    );
+    ingest(snap.docs);
+    publicQueryOk = true;
+  } catch (err) {
+    console.warn('[stories] public query failed (status+visibility+createdAt)', err);
+    const code =
+      err && typeof err === 'object' && 'code' in err
+        ? String((err as { code?: string }).code ?? '')
+        : '';
+    const raw = (err instanceof Error ? err.message : String(err ?? 'unknown'))
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 180);
+
+    if (isIndexError(err)) {
+      lastError = `${STORY_INDEX_ERROR_MESSAGE}${code ? ` [${code}]` : ''}`;
+    } else if (isPermissionError(err)) {
+      lastError = `${STORY_PERMISSION_ERROR_MESSAGE}${code ? ` [${code}]` : ''}`;
+    } else {
+      lastError = code
+        ? `Stories query failed: ${code} — ${raw || 'no message'}`
+        : `Stories query failed: ${raw || 'unknown error'}`;
+    }
+
+    // If the composite index is still building, fall back without orderBy.
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, 'stories'),
           where('status', '==', 'published'),
           where('visibility', '==', 'public'),
-          where('expiresAt', '>', now),
-          orderBy('expiresAt', 'asc'),
           limit(pageSize),
-        ]
-      : [
-          where('status', '==', 'published'),
-          where('expiresAt', '>', now),
-          orderBy('expiresAt', 'asc'),
-          limit(pageSize),
-        ];
-    const snap = await getDocs(query(collection(db, 'stories'), ...constraints));
-    ingest(snap.docs);
-  };
-
-  // Older production rules required visibility on list; try that first, then the
-  // simpler status+expiresAt query used by current rules / indexes.
-  for (const withVisibility of [true, false] as const) {
-    try {
-      await tryPublic(withVisibility);
+        ),
+      );
+      ingest(snap.docs);
       publicQueryOk = true;
       lastError = undefined;
-      break;
-    } catch (err) {
-      console.warn(
-        `[stories] public query failed (visibility=${withVisibility})`,
-        err,
-      );
-      if (isPermissionError(err)) lastError = STORY_PERMISSION_ERROR_MESSAGE;
-      else if (isIndexError(err)) lastError = STORY_INDEX_ERROR_MESSAGE;
-      else lastError = err instanceof Error ? err.message : 'Could not load stories.';
+    } catch (err2) {
+      console.warn('[stories] fallback status+visibility failed', err2);
     }
   }
 
@@ -288,7 +294,6 @@ export async function fetchActiveStories(
     }
   }
 
-  // Admins can list broader story docs; keep only still-publicly-active for the rail.
   if (options?.isAdmin) {
     try {
       const adminSnap = await getDocs(
@@ -302,7 +307,6 @@ export async function fetchActiveStories(
 
   return {
     stories: [...byId.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
-    // Only surface infra errors when public list truly failed (not empty rail).
     error: publicQueryOk ? undefined : lastError,
   };
 }

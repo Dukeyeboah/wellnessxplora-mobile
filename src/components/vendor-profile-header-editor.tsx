@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { ImageUploadGuidancePanel } from '@/components/image-upload-guidance-panel';
 import { ThemedText } from '@/components/themed-text';
 import { Shadows, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -34,6 +35,11 @@ export function VendorProfileHeaderEditor({
         ) : (
           <View style={styles.coverPlaceholder}>
             <Ionicons name="image-outline" size={28} color={theme.textSecondary} />
+            {editable ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                Add banner
+              </ThemedText>
+            ) : null}
           </View>
         )}
         {editable ? (
@@ -47,11 +53,19 @@ export function VendorProfileHeaderEditor({
         <Pressable
           disabled={!editable}
           onPress={onEditLogo}
-          style={[styles.logoWrap, { borderColor: theme.backgroundElement, backgroundColor: theme.backgroundElement }]}>
+          style={[
+            styles.logoWrap,
+            { borderColor: theme.backgroundElement, backgroundColor: theme.backgroundElement },
+          ]}>
           {logoUri ? (
             <Image source={{ uri: logoUri }} style={styles.logo} contentFit="cover" />
           ) : (
-            <View style={[styles.logo, styles.logoPlaceholder, { backgroundColor: theme.backgroundSelected }]}>
+            <View
+              style={[
+                styles.logo,
+                styles.logoPlaceholder,
+                { backgroundColor: theme.backgroundSelected },
+              ]}>
               <Ionicons name="storefront-outline" size={24} color={theme.textSecondary} />
             </View>
           )}
@@ -64,9 +78,10 @@ export function VendorProfileHeaderEditor({
       </View>
 
       {editable ? (
-        <ThemedText type="small" themeColor="textSecondary" style={styles.recs}>
-          View image recommendations
-        </ThemedText>
+        <View style={styles.guidanceStack}>
+          <ImageUploadGuidancePanel role="profile" />
+          <ImageUploadGuidancePanel role="banner" />
+        </View>
       ) : null}
     </View>
   );
@@ -90,6 +105,7 @@ const styles = StyleSheet.create({
     height: 148,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
   },
   editFab: {
     position: 'absolute',
@@ -134,8 +150,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  recs: {
-    paddingLeft: Spacing.one,
-    fontSize: 12,
+  guidanceStack: {
+    paddingHorizontal: Spacing.one,
+    gap: Spacing.two,
+    marginTop: Spacing.one,
   },
 });

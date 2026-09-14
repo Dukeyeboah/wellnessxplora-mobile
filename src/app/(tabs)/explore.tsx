@@ -19,7 +19,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppHeader } from '@/components/app-header';
 import { ExploreCarouselSectionRow } from '@/components/explore-carousel-section';
-import { ExploreCategoryGrid } from '@/components/explore-category-grid';
 import { ExploreListingCard } from '@/components/explore-listing-card';
 import { ExploreVendorCard } from '@/components/explore-vendor-card';
 import { ThemedText } from '@/components/themed-text';
@@ -27,6 +26,8 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, ExploreBottomExtra, ExploreSectionGap, MaxContentWidth, Shadows, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useChrome, useScrollChrome } from '@/lib/chrome';
+import { CATEGORY_LOGO_SOURCES } from '@/lib/category-logos';
+import { EXPLORE_CATEGORIES } from '@/lib/explore-categories';
 import {
   fetchExploreHubCarousels,
   fetchExploreHubListings,
@@ -39,6 +40,8 @@ import {
   type ExploreListing,
   type ExploreVendor,
 } from '@/lib/listings';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 
 const ALL_CATS = '__all__';
 
@@ -90,6 +93,7 @@ const VIEW_PILLS: {
 export default function ExploreScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const { resetChrome } = useChrome();
   const scrollChrome = useScrollChrome();
@@ -384,7 +388,45 @@ export default function ExploreScreen() {
           )}
 
           <View style={styles.paddedBlock}>
-            <ExploreCategoryGrid />
+            <Pressable
+              onPress={() => router.push('/categories' as never)}
+              style={({ pressed }) => [
+                styles.categoriesEntry,
+                Shadows.card,
+                {
+                  backgroundColor: theme.backgroundElement,
+                  opacity: pressed ? 0.92 : 1,
+                },
+              ]}>
+              <View style={styles.categoriesEntryHeader}>
+                <View style={styles.categoriesEntryCopy}>
+                  <ThemedText type="smallBold" style={styles.categoriesEntryTitle}>
+                    Browse all categories
+                  </ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {EXPLORE_CATEGORIES.length} wellness categories to explore
+                  </ThemedText>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={theme.tint} />
+              </View>
+              <View style={styles.categoriesPreview}>
+                {EXPLORE_CATEGORIES.slice(0, 4).map((category) => {
+                  const logo = CATEGORY_LOGO_SOURCES[category.slug];
+                  return (
+                    <View
+                      key={category.slug}
+                      style={[
+                        styles.categoriesPreviewTile,
+                        { backgroundColor: theme.backgroundSelected },
+                      ]}>
+                      {logo ? (
+                        <Image source={logo} style={styles.categoriesPreviewImage} contentFit="cover" />
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+            </Pressable>
           </View>
         </ScrollView>
       </ThemedView>
@@ -621,6 +663,38 @@ const styles = StyleSheet.create({
   empty: {
     marginTop: Spacing.four,
     textAlign: 'center',
+  },
+  categoriesEntry: {
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  categoriesEntryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  categoriesEntryCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  categoriesEntryTitle: {
+    fontSize: 17,
+    lineHeight: 22,
+  },
+  categoriesPreview: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  categoriesPreviewTile: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  categoriesPreviewImage: {
+    width: '100%',
+    height: '100%',
   },
   errorText: {
     color: '#B42318',

@@ -27,6 +27,14 @@ export const Colors = {
   },
 } as const;
 
+/** Active engagement fills — soft brand-aligned accents. */
+export const EngagementColors = {
+  /** Soft sage green (like / heart filled). */
+  like: '#6B9B7A',
+  /** Soft rose-pink (save / bookmark filled). */
+  bookmark: '#E8919A',
+} as const;
+
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
 export const Fonts = Platform.select({

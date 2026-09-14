@@ -184,7 +184,14 @@ export default function CategoryScreen() {
   const header = (
     <View style={[styles.chrome, { paddingTop: insets.top, backgroundColor: theme.background }]}>
       <View style={styles.titleRow}>
-        <Pressable hitSlop={8} onPress={() => router.back()} style={styles.sideButton}>
+        <Pressable
+          hitSlop={8}
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/categories' as never);
+          }}
+          style={styles.sideButton}
+          accessibilityLabel="Back to categories">
           <Ionicons name="chevron-back" size={22} color={theme.text} />
         </Pressable>
         <ThemedText numberOfLines={2} style={styles.pageTitle}>

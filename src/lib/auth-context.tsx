@@ -7,10 +7,11 @@ import {
   type ConfirmationResult,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { Platform } from 'react-native';
 
 import { auth, db } from '@/lib/firebase';
+import { ensureVendorDoc } from '@/lib/ensure-vendor-doc';
 import { signInWithGoogleIdToken, signInWithGooglePopup } from '@/lib/google-auth';
 import { clearPhoneRecaptcha, normalizePhoneForAuth, sendPhoneCode } from '@/lib/phone-auth';
 import { fetchUserProfile, type UserProfile } from '@/lib/user-profile';
@@ -30,6 +31,8 @@ type AuthContextValue = {
   loginWithGoogleIdToken: (idToken: string) => Promise<void>;
   startPhoneLogin: (phone: string, recaptchaContainerId: string) => Promise<ConfirmationResult>;
   confirmPhoneLogin: (confirmation: ConfirmationResult, code: string) => Promise<void>;
+  /** Upgrade an explorer to vendor and ensure a storefront doc exists. */
+  upgradeToVendorRole: () => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -77,7 +80,7 @@ function mapAuthError(error: unknown): string {
     case 'auth/profile-exists':
       return 'That account already exists. Log in instead.';
     case 'auth/role-required':
-      return 'Select Vendor or Explorer before continuing.';
+      return 'Choose Member or Vendor before continuing.';
     default:
       return 'Could not sign in. Please try again.';
   }
@@ -99,12 +102,26 @@ async function createUserProfile(user: User, role: UserRole): Promise<void> {
     name: displayName,
     email,
     role,
+    capabilities: role === 'vendor' ? ['member', 'vendor'] : ['member'],
     photoURL: user.photoURL ?? '',
     bannerURL: '',
     profileComplete: false,
     createdAt: serverTimestamp(),
     location: { country: '', city: '', area: '' },
   });
+
+  if (role === 'vendor') {
+    try {
+      await ensureVendorDoc({
+        uid: user.uid,
+        businessName: displayName,
+        photoURL: user.photoURL ?? '',
+      });
+    } catch (err) {
+      // Rules may require verified email — role is still set; storefront can be created later.
+      console.warn('[auth] ensureVendorDoc on signup failed', err);
+    }
+  }
 }
 
 async function ensureProfile(user: User): Promise<UserRole | null> {
@@ -200,6 +217,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [finishAuth],
   );
 
+  const upgradeToVendorRole = useCallback(async () => {
+    const current = auth.currentUser;
+    if (!current) throw new Error('You must be signed in to become a vendor.');
+    await updateDoc(doc(db, 'users', current.uid), {
+      role: 'vendor',
+      capabilities: ['member', 'vendor'],
+      updatedAt: serverTimestamp(),
+    });
+    const profile = await fetchUserProfile(current.uid);
+    await ensureVendorDoc({
+      uid: current.uid,
+      businessName: profile?.name || current.displayName || 'My business',
+      photoURL: profile?.photoURL || current.photoURL || '',
+    });
+    await reloadUserProfile();
+  }, [reloadUserProfile]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -207,6 +241,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userProfile,
       loading,
       reloadUserProfile,
+      upgradeToVendorRole,
       login: async (email, password) => {
         pendingSignupRole = null;
         const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
@@ -262,7 +297,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await signOut(auth);
       },
     }),
-    [user, userRole, userProfile, loading, reloadUserProfile, finishAuth, loginWithGoogleIdTokenCb],
+    [
+      user,
+      userRole,
+      userProfile,
+      loading,
+      reloadUserProfile,
+      upgradeToVendorRole,
+      finishAuth,
+      loginWithGoogleIdTokenCb,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

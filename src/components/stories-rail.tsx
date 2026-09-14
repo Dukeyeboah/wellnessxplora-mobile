@@ -73,7 +73,14 @@ export function StoriesRail({
         isAdmin,
       });
       setGroups(groupStoriesByAuthor(stories));
-      setLoadError(error ?? null);
+      // Always surface query failures (including guests) so rules/index issues are visible.
+      if (error && stories.length === 0) {
+        setLoadError(error);
+        console.warn('[StoriesRail]', error);
+      } else {
+        setLoadError(null);
+        if (error) console.warn('[StoriesRail]', error);
+      }
     } catch (err) {
       console.warn('[StoriesRail] load failed', err);
       setGroups([]);
@@ -197,11 +204,11 @@ export function StoriesRail({
       </ScrollView>
 
       {loadError && !loading && groups.length === 0 ? (
-        <ThemedText type="small" themeColor="textSecondary" style={styles.errorHint}>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.emptyHint}>
           {loadError}
         </ThemedText>
       ) : !loading && groups.length === 0 ? (
-        <ThemedText type="small" themeColor="textSecondary" style={styles.errorHint}>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.emptyHint}>
           No live stories right now — they stay up for about 24 hours.
         </ThemedText>
       ) : null}
@@ -308,7 +315,7 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 4,
   },
-  errorHint: {
+  emptyHint: {
     fontSize: 11,
     marginTop: 4,
     paddingHorizontal: 2,

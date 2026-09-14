@@ -22,8 +22,9 @@ export function ProfileMenuSheet({ visible, onClose }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const { user, userProfile, userRole, logout } = useAuth();
+  const { user, userProfile, userRole, logout, upgradeToVendorRole } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -53,13 +54,28 @@ export function ProfileMenuSheet({ visible, onClose }: Props) {
     vendorOnly?: boolean;
     adminOnly?: boolean;
   }[] = [
-    { icon: 'grid-outline', label: 'Dashboard', href: '/dashboard', vendorOnly: true },
-    { icon: 'heart-outline', label: 'Favorites', href: '/favorites' },
+    { icon: 'grid-outline', label: 'Dashboard', href: '/dashboard' },
+    { icon: 'people-outline', label: 'Connections', href: '/connections' },
+    { icon: 'bookmark-outline', label: 'Favorites', href: '/favorites' },
     { icon: 'cart-outline', label: 'Cart', href: '/cart' },
     { icon: 'person-outline', label: 'Edit profile', href: '/profile-edit' },
     { icon: 'settings-outline', label: 'Account', href: '/profile' },
     { icon: 'shield-outline', label: 'Admin', href: '/admin', adminOnly: true },
   ];
+
+  const onBecomeVendor = async () => {
+    if (upgrading) return;
+    setUpgrading(true);
+    try {
+      await upgradeToVendorRole();
+      onClose();
+      router.push('/profile-edit' as never);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUpgrading(false);
+    }
+  };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -115,6 +131,18 @@ export function ProfileMenuSheet({ visible, onClose }: Props) {
             </Pressable>
           );
           })}
+
+        {userRole === 'explorer' ? (
+          <Pressable
+            onPress={() => void onBecomeVendor()}
+            disabled={upgrading}
+            style={({ pressed }) => [styles.menuRow, { opacity: pressed || upgrading ? 0.75 : 1 }]}>
+            <Ionicons name="storefront-outline" size={20} color={theme.tint} />
+            <ThemedText type="smallBold" style={styles.menuLabel}>
+              {upgrading ? 'Setting up storefront…' : 'Become a vendor'}
+            </ThemedText>
+          </Pressable>
+        ) : null}
 
         <Pressable
           onPress={() => {

@@ -8,7 +8,9 @@ import {
   type ReactNode,
 } from 'react';
 
+import { CreateChoiceSheet } from '@/components/create-choice-sheet';
 import { FeedCreateComposer } from '@/components/feed-create-composer';
+import { ListingEditorSheet } from '@/components/listing-editor-sheet';
 import { fetchIsAdmin } from '@/lib/admin-auth';
 import { useAuth } from '@/lib/auth-context';
 import type { PostAuthorType } from '@/lib/feed-posts';
@@ -25,14 +27,17 @@ const CreatePostContext = createContext<CreatePostContextValue | null>(null);
 export function CreatePostProvider({ children }: { children: ReactNode }) {
   const { user, userRole, userProfile } = useAuth();
   const { showSignInModal } = useSignInModal();
-  const [open, setOpen] = useState(false);
+  const [choiceOpen, setChoiceOpen] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [productOpen, setProductOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [vendorName, setVendorName] = useState('');
   const [vendorPhotoURL, setVendorPhotoURL] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
 
   const isVendor = userRole === 'vendor';
-  const canCreate = Boolean(user) && (isVendor || isAdmin);
+  const canCreatePost = Boolean(user) && (isVendor || isAdmin);
+  const canCreateProduct = Boolean(user) && isVendor;
 
   const authorType: PostAuthorType = isAdmin && !isVendor ? 'wellnessxplora' : 'vendor';
   const authorName =
@@ -61,37 +66,62 @@ export function CreatePostProvider({ children }: { children: ReactNode }) {
 
   const openCreatePost = useCallback(() => {
     if (!user) {
-      showSignInModal('Sign in with a vendor or admin account to create posts.');
-      return;
-    }
-    if (!canCreate) {
       showSignInModal(
-        'Only vendors and WellnessXplora editors can publish posts. Log in with a creator account to share.',
+        'Sign in to create posts. Vendors and service providers can also list products from here.',
       );
       return;
     }
-    setOpen(true);
-  }, [user, canCreate, showSignInModal]);
+    setChoiceOpen(true);
+  }, [user, showSignInModal]);
+
+  const onChoosePost = useCallback(() => {
+    if (!canCreatePost) return;
+    setChoiceOpen(false);
+    setComposerOpen(true);
+  }, [canCreatePost]);
+
+  const onChooseProduct = useCallback(() => {
+    if (!canCreateProduct) return;
+    setChoiceOpen(false);
+    setProductOpen(true);
+  }, [canCreateProduct]);
 
   const value = useMemo(() => ({ openCreatePost }), [openCreatePost]);
 
   return (
     <CreatePostContext.Provider value={value}>
       {children}
-      {user && canCreate ? (
+      <CreateChoiceSheet
+        visible={choiceOpen}
+        canCreatePost={canCreatePost}
+        canCreateProduct={canCreateProduct}
+        onClose={() => setChoiceOpen(false)}
+        onChoosePost={onChoosePost}
+        onChooseProduct={onChooseProduct}
+      />
+      {canCreatePost ? (
         <FeedCreateComposer
           key={refreshKey}
-          visible={open}
-          onClose={() => setOpen(false)}
+          visible={composerOpen}
+          onClose={() => setComposerOpen(false)}
           onCreated={() => {
-            setOpen(false);
+            setComposerOpen(false);
             setRefreshKey((k) => k + 1);
             notifyFeedChanged();
           }}
           authorType={authorType}
           authorName={authorName}
           authorPhotoURL={authorPhoto}
-          vendorId={isVendor ? user.uid : undefined}
+          vendorId={user?.uid}
+        />
+      ) : null}
+      {canCreateProduct && user ? (
+        <ListingEditorSheet
+          visible={productOpen}
+          vendorId={user.uid}
+          listing={null}
+          onClose={() => setProductOpen(false)}
+          onSaved={() => setProductOpen(false)}
         />
       ) : null}
     </CreatePostContext.Provider>

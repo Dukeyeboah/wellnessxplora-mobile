@@ -395,40 +395,63 @@ export async function fetchVendorPosts(vendorId: string): Promise<FeedPost[]> {
   });
 }
 
-/** Public profile: published posts only. */
+/** Public profile: published posts for this storefront or author (incl. WellnessXplora). */
 export async function fetchPublishedVendorPosts(vendorId: string): Promise<FeedPost[]> {
-  try {
-    const snap = await getDocs(
-      query(
-        collection(db, 'posts'),
-        where('vendorId', '==', vendorId),
-        where('status', '==', 'published'),
-        where('visibility', '==', 'public'),
-        orderBy('publishedAt', 'desc'),
-        limit(40),
-      ),
-    );
-    return snap.docs.map((d) => mapPostDoc(d));
-  } catch (err) {
-    console.warn('[posts] published-by-vendor query failed, trying authorId fallback', err);
+  const byId = new Map<string, FeedPost>();
+  const ingest = (docs: QueryDocumentSnapshot[]) => {
+    for (const d of docs) {
+      const post = mapPostDoc(d);
+      if (post.status !== 'published') continue;
+      if (post.visibility && post.visibility !== 'public') continue;
+      byId.set(post.id, post);
+    }
+  };
+
+  const tryQuery = async (build: () => ReturnType<typeof query>) => {
     try {
-      const snap = await getDocs(
-        query(
-          collection(db, 'posts'),
-          where('authorId', '==', vendorId),
-          where('authorType', '==', 'vendor'),
-          where('status', '==', 'published'),
-          orderBy('publishedAt', 'desc'),
-          limit(40),
-        ),
-      );
-      return snap.docs.map((d) => mapPostDoc(d));
-    } catch (err2) {
-      console.warn('[posts] published authorId query failed', err2);
-      const all = await fetchVendorPosts(vendorId).catch(() => [] as FeedPost[]);
-      return all.filter((p) => p.status === 'published');
+      const snap = await getDocs(build());
+      ingest(snap.docs);
+    } catch (err) {
+      console.warn('[posts] published profile query failed', err);
+    }
+  };
+
+  await tryQuery(() =>
+    query(
+      collection(db, 'posts'),
+      where('vendorId', '==', vendorId),
+      where('status', '==', 'published'),
+      where('visibility', '==', 'public'),
+      orderBy('publishedAt', 'desc'),
+      limit(40),
+    ),
+  );
+
+  // Covers WellnessXplora / admin posts that store authorId but empty vendorId.
+  await tryQuery(() =>
+    query(
+      collection(db, 'posts'),
+      where('authorId', '==', vendorId),
+      where('status', '==', 'published'),
+      orderBy('publishedAt', 'desc'),
+      limit(40),
+    ),
+  );
+
+  if (byId.size === 0) {
+    const all = await fetchVendorPosts(vendorId).catch(() => [] as FeedPost[]);
+    for (const post of all) {
+      if (post.status !== 'published') continue;
+      if (post.visibility && post.visibility !== 'public') continue;
+      byId.set(post.id, post);
     }
   }
+
+  return [...byId.values()].sort((a, b) => {
+    const aTime = (a.publishedAt ?? a.updatedAt ?? a.createdAt).getTime();
+    const bTime = (b.publishedAt ?? b.updatedAt ?? b.createdAt).getTime();
+    return bTime - aTime;
+  });
 }
 
 export function isFeedPermissionError(error: unknown): boolean {

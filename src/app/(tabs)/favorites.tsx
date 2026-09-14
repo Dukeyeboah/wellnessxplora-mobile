@@ -18,7 +18,7 @@ import { ExploreVendorCard } from '@/components/explore-vendor-card';
 import { FeedPostCard } from '@/components/feed-post-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Shadows, Spacing } from '@/constants/theme';
+import { BottomTabInset, EngagementColors, Shadows, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -234,7 +234,7 @@ export default function FavoritesScreen() {
       <ThemedView style={styles.guestScreen}>
         <View style={[styles.guestBody, { paddingBottom: insets.bottom + BottomTabInset + Spacing.four }]}>
           <View style={[styles.iconWrap, { backgroundColor: theme.backgroundElement }]}>
-            <Ionicons name="heart-outline" size={36} color={theme.tint} />
+            <Ionicons name="bookmark-outline" size={36} color={theme.tint} />
           </View>
           <ThemedText type="smallBold" style={styles.guestTitle}>
             Save products you love
@@ -277,7 +277,7 @@ export default function FavoritesScreen() {
       }}>
       {isEmpty ? (
         <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
-          No saved items yet. Bookmark a post or tap the heart on a product or vendor.
+          No saved items yet. Bookmark a post or tap the bookmark on a product or vendor.
         </ThemedText>
       ) : null}
 
@@ -293,7 +293,7 @@ export default function FavoritesScreen() {
                   void unsavePost(user.uid, post.id).then(load);
                 }}
                 style={styles.removeBtn}>
-                <Ionicons name="bookmark" size={18} color={theme.tint} />
+                <Ionicons name="bookmark" size={18} color={EngagementColors.bookmark} />
               </Pressable>
             </View>
           ))}
@@ -315,7 +315,7 @@ export default function FavoritesScreen() {
                   void removeVendorBookmark(bookmark.id, user.uid).then(load);
                 }}
                 style={styles.removeBtn}>
-                <Ionicons name="heart" size={18} color="#E11D48" />
+                <Ionicons name="bookmark" size={18} color={EngagementColors.bookmark} />
               </Pressable>
             </View>
           ))}
@@ -339,7 +339,7 @@ export default function FavoritesScreen() {
                     void removeListingBookmark(bookmark.id, user.uid).then(load);
                   }}
                   style={styles.productRemove}>
-                  <Ionicons name="heart" size={16} color="#E11D48" />
+                  <Ionicons name="bookmark" size={16} color={EngagementColors.bookmark} />
                 </Pressable>
               </View>
             ))}
